@@ -1,0 +1,15 @@
+database: TEST_DB
+schema: PUBLIC
+name: TEST_AGENT
+workspace_root: /path/to/test-fixture-example
+workspace_type: single
+agent_dir: .
+connection: demo
+cli_tool: snow
+stage_path: "@TEST_DB.PUBLIC.EVAL_STAGE"
+dev_dataset_name: TEST_AGENT_dev_ds_v1
+test_dataset_name: TEST_AGENT_test_ds_v1
+eval_table: TEST_DB.PUBLIC.AGENT_EVAL_DATA
+dev_split_value: TRAIN
+test_split_value: VALIDATION
+execution_mode: supervised

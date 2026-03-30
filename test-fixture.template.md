@@ -34,6 +34,7 @@ Before testing, verify:
 - [ ] A Snowflake stage exists for uploading eval config YAMLs
 - [ ] `snow` CLI (or equivalent) is installed with the named connection configured
 - [ ] Python 3.11+ is available (for the build script)
+- [ ] Refer to `cortex-agent-optimization/references/agent-template/` for template examples and `test-fixture-example/` for a working build script example
 
 ---
 

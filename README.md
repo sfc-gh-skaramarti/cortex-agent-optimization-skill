@@ -25,9 +25,12 @@ cortex-agent-optimization/
 ├── review/SKILL.md                   # Cross-run scoring, accept/reject, snapshots
 ├── eval-data/SKILL.md                # Create, validate, re-balance dev/test splits
 └── references/
-    ├── project-structure.md          # Output directory layout
+    ├── agent-template/               # Format validation examples
+    ├── eval-polling.md               # Eval completion status queries
     ├── eval-setup.md                 # Eval config YAML and dataset setup
-    └── optimization-patterns.md      # Failure classification tree, edit patterns
+    ├── optimization-patterns.md      # Failure classification tree, edit patterns
+    ├── project-structure.md          # Output directory layout
+    └── resume-iteration.md           # Resume interrupted iterations
 ```
 
 ## Getting Started
@@ -41,3 +44,37 @@ cortex-agent-optimization/
 ## Specification
 
 The full design specification is in `cortex-agent-optimization-spec.md`. All skill files reference the spec section they implement.
+
+## Related Bundled Skills
+
+This skill provides **statistical rigor and reproducibility** for agent optimization through dev/test splits, 3-run evaluations, and quantitative acceptance criteria (±1σ improvement).
+
+### Complementary Workflows
+
+**Dataset Creation:**
+- For advanced dataset options (production data, Streamlit event explorer), see bundled `dataset-curation` skill
+- Particularly useful: Agent Events Explorer for annotating real production queries
+
+**Debugging:**
+- For deep trace analysis during failure investigation, see bundled `debug-single-query-for-cortex-agent` skill
+- Provides GET_AI_RECORD_TRACE queries and observability log analysis
+
+**Ad-hoc Testing:**
+- For interactive question testing between iterations, see bundled `adhoc-testing-for-cortex-agent` skill
+- Good for sanity checks before running formal evaluations
+
+### Choosing Between Optimization Approaches
+
+**Use this skill (`cortex-agent-optimization`) when:**
+- You need reproducible, quantitative metrics
+- You want automated acceptance criteria (statistical thresholds)
+- You're optimizing for generalization (dev/test methodology prevents overfitting)
+- You prefer data-driven decisions over qualitative assessment
+
+**Use bundled `optimize-cortex-agent` when:**
+- You have domain experts available for qualitative review
+- You prefer single evaluation set with expert judgment
+- You want integrated workspace/versioning with get_agent_config.py scripts
+- You need todo tracking and phase-based workflow management
+
+Both are valid approaches serving different team needs.
