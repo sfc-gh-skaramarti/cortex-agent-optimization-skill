@@ -87,26 +87,36 @@ Then poll all runs in parallel using the parallel polling pattern from `referenc
 ## Step 3: Analyze DEV Failures
 
 Query aggregate results across all `<RUNS_PER_SPLIT>` DEV runs. Build a UNION ALL query with one SELECT block per run (`<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`):
+
+**Important — exclude two categories of non-representative rows before aggregating:**
+- `METRIC_CALLS LIKE '%Missing ground truth%'` — AC cannot be scored on invocations-only rows (no `ground_truth_output`); these always return 0 and are dataset gaps, not agent failures.
+- `METRIC_CALLS LIKE '%LLM error%' OR LIKE '%Evaluation failed%'` — the LLM judge hit an error (e.g. token limit on long traces); these always return 0 and are infrastructure failures, not agent failures.
+
+The Snowflake UI excludes these rows automatically. Your queries must do the same or scores will appear far lower than the UI shows.
+
 ```sql
 SELECT METRIC_NAME,
        ROUND(AVG(EVAL_AGG_SCORE) * 100, 1) AS MEAN_SCORE_PCT,
        ROUND(STDDEV(EVAL_AGG_SCORE) * 100, 1) AS STDDEV_PCT,
        COUNT(*) AS N
 FROM (
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  SELECT METRIC_NAME, EVAL_AGG_SCORE, METRIC_CALLS FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
     '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
   ))
   UNION ALL
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  SELECT METRIC_NAME, EVAL_AGG_SCORE, METRIC_CALLS FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
     '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r2'
   ))
   -- ... add one UNION ALL block per run through r<RUNS_PER_SPLIT>
 )
 WHERE METRIC_NAME IS NOT NULL
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Missing ground truth%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%LLM error%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Evaluation failed%'
 GROUP BY METRIC_NAME;
 ```
 
-For per-question failure analysis, query individual question scores across all `<RUNS_PER_SPLIT>` runs. Filter to questions where **mean** `EVAL_AGG_SCORE` across the runs is `< 1.0`.
+For per-question failure analysis, query individual question scores across all `<RUNS_PER_SPLIT>` runs. Apply the same artifact exclusion filter (`METRIC_CALLS` filters above). Filter to questions where **mean** `EVAL_AGG_SCORE` across the scoreable runs is `< 1.0`.
 
 Distinguish failure confidence:
 - **High-confidence failures**: Failed in all `<RUNS_PER_SPLIT>` runs — these drive instruction changes.
@@ -282,9 +292,13 @@ FROM (
   -- UNION ALL of per-run means for dev_r1..rN and dev_post_r1..rN
   SELECT '<ITER_NAME>_dev_r1' AS RUN_NAME, AVG(EVAL_AGG_SCORE) AS MEAN_SCORE
   FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(..., '<ITER_NAME>_dev_r1'))
-  WHERE METRIC_NAME = 'logical_consistency' GROUP BY 1
+  WHERE METRIC_NAME = 'logical_consistency'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%Missing ground truth%'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%LLM error%'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%Evaluation failed%'
+  GROUP BY 1
   UNION ALL
-  -- Repeat for all runs
+  -- Repeat for all runs (apply same METRIC_CALLS filters in each block)
 )
 HAVING ABS(pre_mean - post_mean) >= 0.03;  -- Expect at least 3% change
 ```

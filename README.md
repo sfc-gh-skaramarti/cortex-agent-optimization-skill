@@ -1,4 +1,4 @@
-# Cortex Agent Optimization Skill
+# Cortex Agent Eval Optimizer Skill
 
 A Cortex Code skill that guides iterative optimization of Snowflake Cortex Agents using dev/test evaluation splits.
 
