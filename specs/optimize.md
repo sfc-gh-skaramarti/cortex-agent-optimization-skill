@@ -23,8 +23,20 @@ parent_skill: cortex-agent-optimization
 - Load `<WORKSPACE_ROOT>/<AGENT_DIR>/DEPLOYMENT_INSTRUCTIONS.md` (if it exists) for project-specific workflow details
 - Ask user for iteration name (e.g., `iter7`) or auto-increment from log
 
+**If resuming an interrupted iteration:**
+1. Use checkpoint detection from `references/resume-iteration.md` to identify completed runs
+2. Validate spec consistency: if both pre-edit and post-edit runs exist, check the mean score delta between them. If delta < 0.05 AND both are far from baseline, pre and post likely used the same (bad) spec — discard both and restart with versioned run names (e.g., `<ITER_NAME>v2_dev_r1`)
+3. Otherwise: resume from the identified checkpoint per `references/resume-iteration.md`
+
 ## Step 2: Run DEV Eval (if not already run)
 Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously — each uses its own slot config (`eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`). Poll all runs in parallel using the parallel polling pattern from `references/eval-polling.md` until every slot reports completion. On lock errors, clear only the affected slot's lock (append `_r<N>` to the dataset name); other slots are unaffected.
+
+**Run Naming Convention:**
+- Pre-edit: `<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`
+- Post-edit: `<ITER_NAME>_dev_post_r1` through `<ITER_NAME>_dev_post_r<RUNS_PER_SPLIT>`
+- TEST: `<ITER_NAME>_test_r1` through `<ITER_NAME>_test_r<RUNS_PER_SPLIT>`
+
+**On deployment failures, instruction revisions, or spec errors:** increment a version suffix (`<ITER_NAME>v2_dev_post_r1..rN`, `v3_...`). Document in `optimization_log.md` which version was accepted. **Never reuse run names** — the eval framework blocks overwrites.
 
 ## Step 3: Analyze DEV Failures
 - Build a UNION ALL query with one SELECT block per run (`<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`) to aggregate results:
@@ -69,12 +81,22 @@ Classify each failure using this ordered decision tree. Evaluate conditions top-
 
 6. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
 
+7. **Check for conflicting instructions across agent files.** If the agent behavior suggests it is following one instruction that contradicts another (e.g., claiming tools are unavailable when tools are configured, asking for clarification when instructions say to proceed with defaults) → **Instruction conflict.** Fix: read all instruction files (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`), identify the conflicting pattern, remove or rephrase to align with intended behavior.
+
 For questions that failed in only 1 of `<RUNS_PER_SPLIT>` runs: classify as **Intermittent** — these are noise and should generally not drive instruction changes unless a clear pattern emerges across multiple questions.
 
 **⚠️ STOP (supervised mode):** Present failure analysis to user. Propose specific instruction changes. In autonomous mode: proceed if all failures have a single unambiguous classification; stop and ask if any failure has multiple plausible classifications or if the proposed change is large (touching 3+ files).
 
 ## Step 5: Edit Instructions
-- Before making changes, verify a snapshot of the current `agent/*.md` state exists (either `baseline/` or the last accepted iteration in `<WORKSPACE_ROOT>/<AGENT_DIR>/snapshots/`). If not, create one now.
+
+**Before making any changes, complete this pre-edit protocol:**
+1. List all files in `<WORKSPACE_ROOT>/<AGENT_DIR>/agent/*.md`
+2. Read each file completely (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`, and any others)
+3. Search for phrases that might conflict with the proposed change (e.g., if adding "tools are available", grep for "don't have access" or "not available")
+4. Verify a snapshot of the current state exists in `snapshots/` (either `baseline/` or the last accepted iteration). If not, create one now.
+
+Only after completing steps 1–4, proceed with modifications.
+
 - Modify the relevant `agent/*.md` files based on failure analysis
 - Follow optimization patterns (load `references/optimization-patterns.md`):
   - **Prefer examples over verbose procedural rules**
@@ -83,7 +105,9 @@ For questions that failed in only 1 of `<RUNS_PER_SPLIT>` runs: classify as **In
   - **Add "WRONG" examples** — showing what NOT to do is effective
   - **Don't over-strengthen rules** that failed 2+ iterations — diminishing returns
 
-**⚠️ STOP (supervised mode):** Get approval on instruction changes before building. In autonomous mode: proceed.
+**⚠️ STOP (supervised mode):** Present the proposed instruction changes (diff) and get approval before building. In autonomous mode: proceed.
+
+If `show_diff.py` exists in `scripts/`, use it to show a readable diff: `python scripts/show_diff.py --from snapshots/<last_iteration>/ --to agent/`
 
 - **Log progress:** Append an IN PROGRESS entry to `optimization_log.md` recording status `Instructions edited, awaiting build/deploy`, files changed, and timestamp
 
@@ -93,12 +117,34 @@ python scripts/build_agent_spec.py
 <CLI_TOOL> sql --connection <CONNECTION> --filename <WORKSPACE_ROOT>/<AGENT_DIR>/deploy.sql
 ```
 - Verify deployment: `DESCRIBE AGENT <AGENT_FQN>;`
+
+**Verify `tool_resources` configuration in deployed spec:**
+- `cortex_analyst_text_to_sql` tools MUST have both `semantic_view` AND `execution_environment` in `tool_resources`
+- `cortex_search` tools MUST have `name` (the search service name) in `tool_resources`
+
+Common errors that cause "Invocation failed":
+- Missing `execution_environment` in analyst `tool_resources`
+- Using legacy format `"warehouse": "WH"` instead of nested `"execution_environment": {"type": "warehouse", "warehouse": "WH"}`
+- Incorrect search service name or missing semantic view
+
+If `tool_resources` are incomplete, update `spec_base.json` and redeploy before running evals.
+
 - **Log progress:** Update the IN PROGRESS entry in `optimization_log.md` to status `Deployed, awaiting DEV post-eval` with timestamp
 
 ## Step 7: Re-run DEV Eval
 - Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously using the same slot configs as Step 2, with post-edit run names (`<ITER_NAME>_dev_post_r1` through `<ITER_NAME>_dev_post_r<RUNS_PER_SPLIT>`); poll all in parallel until every slot reports completion
+
+**Validate pre/post delta before applying t-test:**
+Compute the mean score delta between pre-edit runs (`<ITER_NAME>_dev_r1..rN`) and post-edit runs (`<ITER_NAME>_dev_post_r1..rN`). If delta < 0.03, the runs likely reflect the same agent spec — verify last deployment succeeded and the agent spec was actually updated (`DESCRIBE AGENT <AGENT_FQN>`). If not updated, rebuild and redeploy, then re-run post-edit evals with versioned names (`<ITER_NAME>v2_dev_post_r1..rN`).
+
 - Apply paired t-test vs previous accepted iteration's DEV per-run means (same formula as `review/SKILL.md` Step 2)
-- If t < critical value for `<RUNS_PER_SPLIT>` on any metric: return to Step 5 and adjust
+
+**On DEV regression (t < critical value):**
+1. Keep the same `<ITER_NAME>` — this is still the same iteration, just revised
+2. Log the failed attempt in `optimization_log.md` with the t-statistic and verdict
+3. Return to Step 3 (re-analyze DEV failures) to revise the approach
+4. Use versioned run names for the retry: `<ITER_NAME>v2_dev_post_r1..rN`, then `v3_...` if needed
+5. Do NOT proceed to TEST until DEV post-edit passes the regression check
 
 ## Step 8: Run TEST Eval (only if DEV is satisfactory)
 Fire all `<RUNS_PER_SPLIT>` TEST runs simultaneously using slot configs `eval_config_test_r1.yaml` through `eval_config_test_r<RUNS_PER_SPLIT>.yaml`. Poll all in parallel until every slot reports completion. Handle lock errors per-slot per `references/eval-setup.md`.
