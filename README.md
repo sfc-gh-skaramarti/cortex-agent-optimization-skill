@@ -2,6 +2,8 @@
 
 A Cortex Code skill that guides iterative optimization of Snowflake Cortex Agents using dev/test evaluation splits.
 
+> **Note:** This is a custom Cortex Code skill, distinct from the bundled `optimize-cortex-agent` sub-skill. See [Related Bundled Skills](#related-bundled-skills) for a comparison of when to use each.
+
 ## How It Works
 
 The skill implements an LLM-as-optimizer loop: Cortex Code reads evaluation failures, edits agent instructions, deploys, and re-evaluates — repeating until scores converge or a termination condition is met.
