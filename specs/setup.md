@@ -28,7 +28,7 @@ parent_skill: cortex-agent-optimization
   - If `<WORKSPACE_ROOT>/scripts/build_agent_spec.py` exists → multi-agent workspace
   - Otherwise → single-agent project
 - If multi-agent detected, ask for agent subdirectory name (default: lowercase agent name)
-- Run `DESCRIBE AGENT <AGENT_FQN>` to confirm it exists and retrieve current spec
+ - Run `cortex agents describe <AGENT_FQN>` (CLI, not SQL) to retrieve current spec; fall back to `snow sql` if unavailable
 - Extract current instructions and tool configuration
 
 **⚠️ STOP**: Confirm agent details and workspace setup with user.
@@ -75,37 +75,11 @@ parent_skill: cortex-agent-optimization
 **⚠️ STOP**: Review eval questions and split with user.
 
 ## Step 5: Create Eval Configs
-- Generate two YAML files and upload to a Snowflake stage:
+- Generate `<RUNS_PER_SPLIT>` YAML files per split (`eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`, and same for TEST), each differing only in `dataset_name` (e.g., `<DEV_DATASET_NAME>_r1` through `_r<RUNS_PER_SPLIT>`)
+- Show full template for `_r1`; note "repeat for `_r2` through `_r<RUNS_PER_SPLIT>`" for remaining files
+- Upload all `2 × <RUNS_PER_SPLIT>` configs to the stage
 
-**`eval_config_dev.yaml`:**
-```yaml
-dataset:
-  dataset_type: "cortex agent"
-  table_name: "<DATABASE>.<SCHEMA>.AGENT_EVAL_DEV"
-  dataset_name: "<AGENT_NAME>_dev_ds_v1"
-  column_mapping:
-    query_text: "INPUT_QUERY"
-    ground_truth: "GROUND_TRUTH"
-
-evaluation:
-  agent_params:
-    agent_name: "<AGENT_FQN>"
-    agent_type: "CORTEX AGENT"
-  run_params:
-    label: "evaluation"
-    description: "Evaluation of <AGENT_NAME> — DEV split"
-  source_metadata:
-    type: "dataset"
-    dataset_name: "<AGENT_NAME>_dev_ds_v1"
-
-metrics:
-  - "answer_correctness"
-  - "logical_consistency"
-```
-
-**`eval_config_test.yaml`:** Same structure, pointing at the TEST view and dataset name.
-
-- Upload both to `@<DATABASE>.<SCHEMA>.<EVAL_STAGE>/`
+- Use the template from `references/eval-setup.md` for `eval_config_dev_r1.yaml`, with `dataset_name: <DEV_DATASET_NAME>_r1` and `table_name` pointing at the DEV view; `eval_config_test_r1.yaml` mirrors it for the TEST view
 
 ## Step 6: Create Metadata and Log
 - Create `<WORKSPACE_ROOT>/<AGENT_DIR>/metadata.yaml`:
@@ -125,6 +99,7 @@ metrics:
   dev_split_value: <DEV_SPLIT_VALUE>
   test_split_value: <TEST_SPLIT_VALUE>
   execution_mode: <EXECUTION_MODE>
+  runs_per_split: <RUNS_PER_SPLIT>
   ```
 - Initialize `<WORKSPACE_ROOT>/<AGENT_DIR>/optimization_log.md` with a `# Optimization Log` heading, a `## Baseline` section, and iteration table template:
   ```markdown
@@ -133,9 +108,10 @@ metrics:
 
 ## Step 7: Run Baseline Eval
 - Build and deploy current instructions (to confirm the pipeline works)
-- Run DEV eval 3 times (`baseline_dev_r1`, `baseline_dev_r2`, `baseline_dev_r3`) — runs must be sequential due to dataset version locks
-- Run TEST eval 3 times (`baseline_test_r1`, `baseline_test_r2`, `baseline_test_r3`)
-- Compute mean and stddev per metric across the 3 runs for each split
+- Collect `runs_per_split` from user — recommend based on dataset size: <20 questions → 6, 20-50 → 4, 50-100 → 3 (default), >100 → 3
+- Fire all `<RUNS_PER_SPLIT>` DEV baseline runs simultaneously, each using its slot config (`eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`); poll all in parallel until every slot reports completion
+- Fire all `<RUNS_PER_SPLIT>` TEST baseline runs simultaneously using the TEST slot configs; poll all in parallel until all complete
+- Compute mean and stddev per metric across all `<RUNS_PER_SPLIT>` runs for each split
 - Record baseline mean scores and stddev in `optimization_log.md`
 
 **⚠️ STOP**: Present baseline scores (mean ± stddev), confirm pipeline works end-to-end.

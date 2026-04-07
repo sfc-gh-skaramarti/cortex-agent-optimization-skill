@@ -13,3 +13,4 @@ eval_table: TEST_DB.PUBLIC.AGENT_EVAL_DATA
 dev_split_value: TRAIN
 test_split_value: VALIDATION
 execution_mode: supervised
+runs_per_split: 3

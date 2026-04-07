@@ -14,6 +14,12 @@ Collect parameters from the user:
 - CLI tool for SQL execution (`<CLI_TOOL>`, default: `snow`)
 - Execution mode (`<EXECUTION_MODE>`: `supervised` or `autonomous`, default: `supervised`)
 - **Workspace directory (`<WORKSPACE_ROOT>`, required)** — prompt: "Where should I create the optimization project?" No default to CWD.
+- **Runs per split (`<RUNS_PER_SPLIT>`)** — number of eval runs per split per iteration. After detecting the eval table (or creating it), count the DEV and TEST question counts and recommend based on dataset size:
+  - < 20 questions → recommend 6
+  - 20–50 questions → recommend 4
+  - 50–100 questions → recommend 3 (default)
+  - \> 100 questions → 3 is sufficient
+  Present the question counts and recommendation; user may override.
 
 **Validate workspace:** Ensure `<WORKSPACE_ROOT>` is NOT inside the skill directory.
 
@@ -25,7 +31,15 @@ Collect parameters from the user:
   - Set `<AGENT_DIR>` = `.`
   - Set `<WORKSPACE_TYPE>` = `"single"`
 
-Run `DESCRIBE AGENT <AGENT_FQN>` to confirm the agent exists and retrieve its current spec. Extract current instructions and tool configuration from the spec output.
+Retrieve the agent spec using the CLI (not SQL — `DESCRIBE AGENT` output is often too large for the SQL execution tool):
+```bash
+cortex agents describe <AGENT_FQN>
+```
+If `cortex agents describe` is unavailable, fall back to:
+```bash
+snow sql -c <CONNECTION> -q "DESCRIBE AGENT <AGENT_FQN>" --format json
+```
+Extract current instructions and tool configuration from the spec output.
 
 **Detect existing datasets:** Run `SHOW DATASETS IN SCHEMA <DATABASE>.<SCHEMA>`. If datasets matching `<AGENT_NAME>` exist (e.g., `<AGENT_NAME>_dev_ds_v2`), reuse their names. Otherwise default to:
 - `<DEV_DATASET_NAME>`: `<AGENT_NAME>_dev_ds_v1`
@@ -59,7 +73,7 @@ Otherwise, create `<WORKSPACE_ROOT>/scripts/build_agent_spec.py` that:
 
 The agent FQN should be configurable (constant at top of script or via `--agent` argument for multi-agent).
 
-**Validation:** Refer to `references/agent-template/` for example template files, or `test-fixture-example/` for a complete working validation setup with build script.
+**Validation:** Refer to `references/agent-template/` for example template files. The skill repo also contains a `test-fixture-example/` directory (at the repo root) with a complete working validation setup including a build script.
 
 ## Step 4: Create Eval Data
 
@@ -81,7 +95,7 @@ Interpret results:
   Ask user: "Found split values '<VALUE1>' and '<VALUE2>'. Which is DEV and which is TEST?"
   Set `<DEV_SPLIT_VALUE>` and `<TEST_SPLIT_VALUE>` based on response.
 
-- **0 or 1 values returned:** Splits not assigned yet.
+- **0 or 1 values returned:** Complete split not detected (exactly 2 distinct values required).
   Ask user to choose split value convention:
   - Option A (default): `'TRAIN'` (DEV) / `'VALIDATION'` (TEST)
   - Option B: `'DEV'` (DEV) / `'TEST'` (TEST)
@@ -122,14 +136,17 @@ SELECT * FROM <EVAL_TABLE> WHERE SPLIT = '<TEST_SPLIT_VALUE>';
 
 ## Step 5: Create Eval Configs
 
-Generate two YAML eval config files using the template in `references/eval-setup.md`:
-- **`eval_config_dev.yaml`**: Points at `<DATABASE>.<SCHEMA>.AGENT_EVAL_DEV`, dataset name `<DEV_DATASET_NAME>`.
-- **`eval_config_test.yaml`**: Points at `<DATABASE>.<SCHEMA>.AGENT_EVAL_TEST`, dataset name `<TEST_DATASET_NAME>`.
+Generate `<RUNS_PER_SPLIT>` YAML eval config files per split. Each file is identical to the template in `references/eval-setup.md` except for `dataset_name`. Show the full template for `_r1` and note "repeat for `_r2` through `_r<RUNS_PER_SPLIT>`":
 
-Write both to `<WORKSPACE_ROOT>/<AGENT_DIR>/` locally. Ask the user for the stage path (`<STAGE_PATH>`), then upload:
+- **`eval_config_dev_r1.yaml`**: `dataset_name: <DEV_DATASET_NAME>_r1`, points at `<DATABASE>.<SCHEMA>.AGENT_EVAL_DEV`.
+- Repeat for `eval_config_dev_r2.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`, incrementing only the `dataset_name` suffix.
+- **`eval_config_test_r1.yaml`** through **`eval_config_test_r<RUNS_PER_SPLIT>.yaml`**: same pattern, pointing at `<DATABASE>.<SCHEMA>.AGENT_EVAL_TEST` with dataset names `<TEST_DATASET_NAME>_r1` through `_r<RUNS_PER_SPLIT>`.
+
+Write all `2 × <RUNS_PER_SPLIT>` configs to `<WORKSPACE_ROOT>/<AGENT_DIR>/` locally. Ask the user for the stage path (`<STAGE_PATH>`), then upload all:
 ```sql
-PUT 'file://<WORKSPACE_ROOT>/<AGENT_DIR>/eval_config_dev.yaml' <STAGE_PATH>/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
-PUT 'file://<WORKSPACE_ROOT>/<AGENT_DIR>/eval_config_test.yaml' <STAGE_PATH>/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+-- Repeat for each config file through r<RUNS_PER_SPLIT>, for both DEV and TEST
+PUT 'file://<WORKSPACE_ROOT>/<AGENT_DIR>/eval_config_dev_r1.yaml' <STAGE_PATH>/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+PUT 'file://<WORKSPACE_ROOT>/<AGENT_DIR>/eval_config_test_r1.yaml' <STAGE_PATH>/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
 ```
 
 ## Step 6: Create Metadata and Log
@@ -151,6 +168,7 @@ eval_table: <EVAL_TABLE>
 dev_split_value: <DEV_SPLIT_VALUE>
 test_split_value: <TEST_SPLIT_VALUE>
 execution_mode: <EXECUTION_MODE>
+runs_per_split: <RUNS_PER_SPLIT>
 ```
 
 Initialize `<WORKSPACE_ROOT>/<AGENT_DIR>/optimization_log.md`:
@@ -174,24 +192,23 @@ python <WORKSPACE_ROOT>/scripts/build_agent_spec.py
 <CLI_TOOL> sql --connection <CONNECTION> --filename <WORKSPACE_ROOT>/<AGENT_DIR>/deploy.sql
 ```
 
-Run DEV eval 3 times sequentially (`baseline_dev_r1`, `baseline_dev_r2`, `baseline_dev_r3`):
+Run DEV eval `<RUNS_PER_SPLIT>` times in parallel. Fire all runs simultaneously, each using its own slot config:
 ```sql
+-- Fire all simultaneously (do not wait between calls)
 CALL EXECUTE_AI_EVALUATION(
   'START',
   OBJECT_CONSTRUCT('run_name', 'baseline_dev_r1'),
-  '<STAGE_PATH>/eval_config_dev.yaml'
+  '<STAGE_PATH>/eval_config_dev_r1.yaml'
 );
--- Wait for completion, then run r2, then r3
+-- Repeat immediately for r2 through r<RUNS_PER_SPLIT>, using eval_config_dev_r2.yaml etc.
 ```
 
-Each run must complete (including scoring) before the next starts. 
+Poll all runs in parallel using the parallel polling pattern from `references/eval-polling.md` until every slot reports completion.
 
-**Polling tip:** See `references/eval-polling.md` for a status check query to monitor completion instead of estimating wait times.
+If "Dataset version already exists" error occurs on a slot, wait 2-3 minutes and retry that slot. If persists 5+ min with no eval running on that slot, clear its stale lock per `references/eval-setup.md`. Other slots are unaffected.
 
-If "Dataset version already exists" error occurs, wait 2-3 minutes and retry. If persists 5+ min with no eval running, clear the stale lock per `references/eval-setup.md`.
+Run TEST eval `<RUNS_PER_SPLIT>` times in parallel (`baseline_test_r1` through `baseline_test_r<RUNS_PER_SPLIT>`) using `eval_config_test_r1.yaml` through `eval_config_test_r<RUNS_PER_SPLIT>.yaml`. Poll all in parallel until all slots report completion.
 
-Run TEST eval 3 times sequentially (`baseline_test_r1`, `baseline_test_r2`, `baseline_test_r3`).
-
-Compute mean and stddev per metric across the 3 runs for each split using the aggregation query pattern from `optimize/SKILL.md` Step 3 (UNION ALL of 3 runs, GROUP BY METRIC_NAME, AVG + STDDEV of EVAL_AGG_SCORE). Run for both DEV and TEST. Record baseline scores in `optimization_log.md`.
+Compute mean and stddev per metric across all `<RUNS_PER_SPLIT>` runs for each split: build a UNION ALL query with one SELECT block per run (`baseline_dev_r1` through `baseline_dev_r<RUNS_PER_SPLIT>`), GROUP BY METRIC_NAME, AVG + STDDEV of EVAL_AGG_SCORE. Run for both DEV and TEST. Record baseline scores in `optimization_log.md`.
 
 **⚠️ STOP**: Present baseline scores (mean ± stddev for each split), confirm pipeline works end-to-end. The optimization project is now ready. Continue to `optimize/SKILL.md` for the first iteration.

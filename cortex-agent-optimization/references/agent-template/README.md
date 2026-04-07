@@ -65,4 +65,26 @@ Description for second tool
 ```
 
 **spec_base.json:**
-Must include: `name`, `model`, `tools` array (with tool names/types), `tool_resources`, and `budget`.
+Must include: `tools` array (each item has `tool_spec.type` and `tool_spec.name`), `tool_resources` map (keyed by tool name), and optionally `orchestration.budget`.
+
+**Tool resource requirements:**
+- **cortex_search** tools: Must have `name` (the search service FQN)
+- **cortex_analyst_text_to_sql** tools: Must have both `semantic_view` (the semantic view FQN) AND `execution_environment` with nested warehouse configuration
+
+**Example tool_resources format:**
+```json
+{
+  "tool_resources": {
+    "search_tool": {
+      "name": "<DATABASE>.<SCHEMA>.<SEARCH_SERVICE>"
+    },
+    "analyze_tool": {
+      "semantic_view": "<DATABASE>.<SCHEMA>.<SEMANTIC_VIEW>",
+      "execution_environment": {
+        "type": "warehouse",
+        "warehouse": "<WAREHOUSE_NAME>"
+      }
+    }
+  }
+}
+```

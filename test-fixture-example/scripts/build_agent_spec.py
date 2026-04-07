@@ -56,7 +56,7 @@ def build_spec(agent_dir: Path) -> dict:
     
     # Add descriptions to tools
     for tool in spec.get("tools", []):
-        tool_name = tool.get("tool_name")
+        tool_name = tool.get("tool_spec", {}).get("name")
         if tool_name and tool_name in tool_descriptions:
             if "tool_spec" not in tool:
                 tool["tool_spec"] = {}

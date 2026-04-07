@@ -80,7 +80,7 @@ ORDER BY TOTAL DESC;
 | Step 2 (Source-of-Truth) | `agent/*.md` files and `spec_base.json` are created; baseline snapshot saved |
 | Step 3 (Build Script) | `build_agent_spec.py` generated, `--dry-run` produces valid spec JSON |
 | Step 4 (Eval Data) | Table detected, routes to eval-data sub-skill if splits not assigned |
-| Step 7 (Baseline) | 3 runs per split complete, baseline scores recorded with mean ± stddev |
+| Step 7 (Baseline) | `<RUNS_PER_SPLIT>` runs per split complete, baseline scores recorded with mean ± stddev |
 
 ### Eval Data (`eval-data/SKILL.md`)
 
@@ -94,17 +94,17 @@ ORDER BY TOTAL DESC;
 
 | Step | What to verify |
 |------|---------------|
-| Step 2 (DEV Eval) | 3 sequential runs complete; dataset version lock handled between runs |
+| Step 2 (DEV Eval) | `<RUNS_PER_SPLIT>` sequential runs complete; dataset version lock handled between runs |
 | Step 3 (Analyze) | Cross-run aggregation with AVG/STDDEV; high-confidence vs noise failures distinguished |
 | Step 4 (Classify) | Decision tree applied in order; each failure gets exactly one classification |
 | Step 5 (Edit) | Snapshot verified before editing; changes are small and targeted |
-| Steps 7-8 (Re-eval) | 3 runs each; mean comparison used for regression check |
+| Steps 7-8 (Re-eval) | `<RUNS_PER_SPLIT>` runs each; per-run means used for paired t-test regression check |
 
 ### Review (`review/SKILL.md`)
 
 | Step | What to verify |
 |------|---------------|
-| Step 1 (Scores) | Mean ± stddev computed across 3 runs per split |
-| Step 2 (Criteria) | Improvement > 1 stddev = ACCEPT; within stddev = marginal; regression = REJECT |
+| Step 1 (Scores) | Per-run means queried separately; paired differences computed across `<RUNS_PER_SPLIT>` runs |
+| Step 2 (Criteria) | One-sided paired t-test (α=0.10) applied; ACCEPT if t ≥ critical value; REJECT on regression |
 | Step 4 (Finalize) | Accept: snapshot saved; Reject: files restored from last accepted snapshot |
 | Termination | 3 consecutive rejections stops the loop |

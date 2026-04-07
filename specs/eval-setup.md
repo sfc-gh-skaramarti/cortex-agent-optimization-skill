@@ -77,24 +77,27 @@ metrics:
 ## Dataset Version Lock Troubleshooting
 
 If `EXECUTE_AI_EVALUATION` fails with "Dataset version SYSTEM_AI_OBS_CORTEX_AGENT_DATASET_VERSION_DO_NOT_DELETE already exists":
-1. Wait 2-3 minutes — a previous eval's scoring phase may still be running
+1. Wait 2-3 minutes — a previous eval's scoring phase may still be running on that slot
 2. If still failing after 5+ min, check for running evals in the UI or via query history
-3. If no eval is running, the lock is stale — clear it:
+3. If no eval is running, the lock is stale — clear it using the specific slot dataset name:
    ```sql
-   ALTER DATASET <DATABASE>.<SCHEMA>.<DATASET_NAME>
+   ALTER DATASET <DATABASE>.<SCHEMA>.<DATASET_NAME>_r<N>
    DROP VERSION 'SYSTEM_AI_OBS_CORTEX_AGENT_DATASET_VERSION_DO_NOT_DELETE';
    ```
 4. **NEVER drop the dataset itself** — this destroys all historical eval results
+5. Other slots are unaffected by a stale lock on slot N — only the failing slot needs to be cleared
 
 ## Multiple Runs per Evaluation
 
-Each eval (DEV or TEST) runs 3 times per iteration to capture model response variance.
+Each eval (DEV or TEST) runs `<RUNS_PER_SPLIT>` times per iteration to capture model response variance.
 
 - **Why:** The same question can receive a correct answer on one run and an incorrect answer on another due to non-deterministic generation. A single run gives a point estimate with unknown variance.
-- **Run naming:** `<ITER_NAME>_<split>_r1`, `<ITER_NAME>_<split>_r2`, `<ITER_NAME>_<split>_r3`
-- **Execution:** Runs must be sequential — the dataset version lock prevents parallel execution. Wait for each run to complete (including scoring phase) before starting the next.
-- **Aggregation:** Compute `AVG` and `STDDEV` of per-question `EVAL_AGG_SCORE` across all 3 runs (UNION ALL of the 3 result sets, then GROUP BY METRIC_NAME).
-- **Failure analysis:** A question that fails in all 3 runs is a high-confidence failure. A question that fails in 1 of 3 runs is likely noise and should generally not drive instruction changes.
-- **Lock implications:** 3 sequential runs means 3x the chance of hitting a stale version lock. Follow the troubleshooting guide above for each occurrence.
+- **Run naming:** `<ITER_NAME>_<split>_r1` through `<ITER_NAME>_<split>_r<RUNS_PER_SPLIT>`
+- **Execution:** Runs are parallel — each run uses a dedicated dataset slot (`<DEV_DATASET_NAME>_r1` through `<DEV_DATASET_NAME>_r<RUNS_PER_SPLIT>`), one per run index, all pointing to the same source view. Each slot holds its own independent version lock. Fire all `<RUNS_PER_SPLIT>` calls simultaneously, then poll all in parallel until every slot reports completion.
+- **Dataset slot naming:** `<DEV_DATASET_NAME>_r1` through `<DEV_DATASET_NAME>_r<RUNS_PER_SPLIT>` for DEV; `<TEST_DATASET_NAME>_r1` through `<TEST_DATASET_NAME>_r<RUNS_PER_SPLIT>` for TEST.
+- **Eval config naming:** `eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`; same `_r<N>` pattern for TEST. Each config is identical except for `dataset_name`.
+- **Aggregation:** Compute `AVG` and `STDDEV` of per-question `EVAL_AGG_SCORE` across all `<RUNS_PER_SPLIT>` runs (UNION ALL of all result sets, then GROUP BY METRIC_NAME).
+- **Failure analysis:** A question that fails in all `<RUNS_PER_SPLIT>` runs is a high-confidence failure. A question that fails in only 1 run is likely noise and should generally not drive instruction changes.
+- **Lock implications:** Each slot has its own independent lock. A stale lock on one slot does not block other slots — check and clear each independently using the slot-specific dataset name.
 
 **Target length:** ~100-120 lines.

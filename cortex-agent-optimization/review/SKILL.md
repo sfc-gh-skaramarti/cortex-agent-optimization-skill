@@ -4,47 +4,55 @@ description: "Review iteration results and make accept/reject decision."
 parent_skill: cortex-agent-optimization
 ---
 
-## Step 1: Compute Scores
+## Step 1: Compute Per-Run Means
 
-Read `metadata.yaml` for parameters if not already loaded.
+Read `metadata.yaml` for parameters if not already loaded. Read `optimization_log.md` to identify the **previous accepted iteration** name (or `baseline` if no iterations have been accepted yet).
 
-Query DEV and TEST results for the current iteration across all 3 runs per split:
+Query per-run means for both the current iter and the previous accepted iter. For each, build a query per run (r1 through r`<RUNS_PER_SPLIT>`) — do NOT union them together:
+
 ```sql
-SELECT METRIC_NAME,
-       ROUND(AVG(EVAL_AGG_SCORE) * 100, 1) AS MEAN_SCORE_PCT,
-       ROUND(STDDEV(EVAL_AGG_SCORE) * 100, 1) AS STDDEV_PCT,
-       COUNT(*) AS N
-FROM (
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
-    '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
-  ))
-  UNION ALL
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
-    '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r2'
-  ))
-  UNION ALL
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
-    '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r3'
-  ))
-)
-WHERE METRIC_NAME IS NOT NULL
-GROUP BY METRIC_NAME
-ORDER BY METRIC_NAME;
+-- Current iter, DEV split — repeat for r1 through r<RUNS_PER_SPLIT>
+SELECT '<ITER_NAME>_dev_r1' AS RUN, METRIC_NAME,
+       AVG(EVAL_AGG_SCORE) AS MEAN
+FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
+)) WHERE METRIC_NAME IS NOT NULL GROUP BY METRIC_NAME;
 ```
 
-Run the same query for the TEST split (`<ITER_NAME>_test_r1` through `_r3`).
+Run the same structure for TEST (`<ITER_NAME>_test_r1` through `_r<RUNS_PER_SPLIT>`), and for the previous accepted iteration's DEV and TEST runs (using the previous iter name from `optimization_log.md`).
 
-Compute combined scores by UNION ALL of all 6 run results (3 DEV + 3 TEST), grouped by METRIC_NAME.
+Produce a paired difference table for each split and metric:
+
+| Run | Metric | iter_mean | prev_mean | diff |
+|-----|--------|-----------|-----------|------|
+| r1  | answer_correctness | ... | ... | ... |
+| r2  | answer_correctness | ... | ... | ... |
+| ... | ... | ... | ... | ... |
+
+Also compute aggregate (mean ± stddev across all `<RUNS_PER_SPLIT>` runs) for display purposes.
 
 ## Step 2: Apply Acceptance Criteria
 
-Compute TEST mean improvement (delta) vs the last accepted iteration's TEST mean (from `optimization_log.md`).
+For each metric, compute the **paired t-statistic** from the `<RUNS_PER_SPLIT>` per-run TEST differences:
 
-**Acceptance rules:**
+```
+d_i = iter_test_r_i_mean - prev_test_r_i_mean   (for i = 1 to RUNS_PER_SPLIT)
+t = mean(d) / (stddev(d) / sqrt(RUNS_PER_SPLIT))
+```
 
-- **ACCEPT** if: TEST mean improves AND the improvement exceeds 1 stddev of the current iteration's TEST scores (signal > noise).
-- **ACCEPT (marginal)** if: TEST mean improves but within 1 stddev — accept only if DEV improvement is strong and consistent across all 3 runs (all 3 individual DEV runs improved vs the previous iteration's individual runs).
-- **REJECT** if: TEST mean regresses by any amount — this is an overfitting signal.
+Compare t against the one-sided critical value (α = 0.10 — reject only if regression is statistically significant):
+
+| runs_per_split | df | reject if t < |
+|---|---|---|
+| 3 | 2 | −1.886 |
+| 4 | 3 | −1.638 |
+| 5 | 4 | −1.533 |
+| 6 | 5 | −1.476 |
+| 8 | 7 | −1.415 |
+| 10 | 9 | −1.383 |
+
+- **ACCEPT** if t ≥ critical value for **all** metrics (no statistically significant regression on TEST)
+- **REJECT** if t < critical value for **any** metric
 
 ## Step 3: Present Recommendation
 
@@ -53,9 +61,8 @@ Compute TEST mean improvement (delta) vs the last accepted iteration's TEST mean
 Present:
 - DEV scores (mean ± stddev) + delta vs previous accepted iteration
 - TEST scores (mean ± stddev) + delta vs previous accepted iteration
-- Combined scores + delta vs previous accepted iteration
-- TEST mean comparison with significance assessment (the deciding metric)
-- Recommendation: **ACCEPT**, **ACCEPT (marginal)**, or **REJECT** with reasoning
+- Per-run paired differences and t-statistics for each TEST metric
+- Recommendation: **ACCEPT** or **REJECT** with t-statistic and critical value
 
 Wait for user confirmation (supervised mode only).
 

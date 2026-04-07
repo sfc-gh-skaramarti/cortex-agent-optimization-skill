@@ -24,27 +24,10 @@ parent_skill: cortex-agent-optimization
 - Ask user for iteration name (e.g., `iter7`) or auto-increment from log
 
 ## Step 2: Run DEV Eval (if not already run)
-Run DEV eval 3 times sequentially (dataset version lock prevents parallel runs):
-```sql
--- Run 1
-CALL EXECUTE_AI_EVALUATION(
-  'START',
-  OBJECT_CONSTRUCT('run_name', '<ITER_NAME>_dev_r1'),
-  '@<STAGE_PATH>/eval_config_dev.yaml'
-);
--- Wait for completion, then run 2 and 3 with _r2, _r3 suffixes
-```
-Each run must complete (including scoring) before the next starts. Wait for the dataset version lock to clear between runs.
-
-- If error "Dataset version already exists": wait 2-3 minutes and retry. If persists 5+ min with no eval running, clear stale lock:
-  ```sql
-  ALTER DATASET <DATABASE>.<SCHEMA>.<DEV_DATASET_NAME>
-  DROP VERSION 'SYSTEM_AI_OBS_CORTEX_AGENT_DATASET_VERSION_DO_NOT_DELETE';
-  ```
-- **NEVER drop the dataset itself** — only the version lock.
+Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously — each uses its own slot config (`eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`). Poll all runs in parallel using the parallel polling pattern from `references/eval-polling.md` until every slot reports completion. On lock errors, clear only the affected slot's lock (append `_r<N>` to the dataset name); other slots are unaffected.
 
 ## Step 3: Analyze DEV Failures
-- Query results from all 3 DEV runs:
+- Build a UNION ALL query with one SELECT block per run (`<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`) to aggregate results:
   ```sql
   SELECT METRIC_NAME,
          ROUND(AVG(EVAL_AGG_SCORE) * 100, 1) AS MEAN_SCORE_PCT,
@@ -58,16 +41,13 @@ Each run must complete (including scoring) before the next starts. Wait for the 
     SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
       '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r2'
     ))
-    UNION ALL
-    SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
-      '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r3'
-    ))
+    -- ... add one UNION ALL block per run through r<RUNS_PER_SPLIT>
   )
   WHERE METRIC_NAME IS NOT NULL
   GROUP BY METRIC_NAME;
   ```
-- Filter to questions where **mean** `EVAL_AGG_SCORE` across the 3 runs is `< 1.0`
-- Questions that fail in all 3 runs are high-confidence failures; questions that fail in only 1 of 3 are noise candidates — note this distinction in the analysis
+- Filter to questions where **mean** `EVAL_AGG_SCORE` across all `<RUNS_PER_SPLIT>` runs is `< 1.0`
+- Questions that fail in all `<RUNS_PER_SPLIT>` runs are high-confidence failures; questions that fail in only 1 run are noise candidates — note this distinction in the analysis
 - **CRITICAL: Only analyze DEV failures. Do NOT examine TEST results at this stage.**
 
 ## Step 4: Classify Failures
@@ -89,7 +69,7 @@ Classify each failure using this ordered decision tree. Evaluate conditions top-
 
 6. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
 
-For questions that failed in only 1 of 3 runs: classify as **Intermittent** — these are noise and should generally not drive instruction changes unless a clear pattern emerges across multiple questions.
+For questions that failed in only 1 of `<RUNS_PER_SPLIT>` runs: classify as **Intermittent** — these are noise and should generally not drive instruction changes unless a clear pattern emerges across multiple questions.
 
 **⚠️ STOP (supervised mode):** Present failure analysis to user. Propose specific instruction changes. In autonomous mode: proceed if all failures have a single unambiguous classification; stop and ask if any failure has multiple plausible classifications or if the proposed change is large (touching 3+ files).
 
@@ -105,29 +85,23 @@ For questions that failed in only 1 of 3 runs: classify as **Intermittent** — 
 
 **⚠️ STOP (supervised mode):** Get approval on instruction changes before building. In autonomous mode: proceed.
 
+- **Log progress:** Append an IN PROGRESS entry to `optimization_log.md` recording status `Instructions edited, awaiting build/deploy`, files changed, and timestamp
+
 ## Step 6: Build and Deploy
 ```bash
 python scripts/build_agent_spec.py
 <CLI_TOOL> sql --connection <CONNECTION> --filename <WORKSPACE_ROOT>/<AGENT_DIR>/deploy.sql
 ```
 - Verify deployment: `DESCRIBE AGENT <AGENT_FQN>;`
+- **Log progress:** Update the IN PROGRESS entry in `optimization_log.md` to status `Deployed, awaiting DEV post-eval` with timestamp
 
 ## Step 7: Re-run DEV Eval
-- Run DEV eval 3 times (`<ITER_NAME>_dev_r1` through `_r3`), sequentially
-- Compare mean scores to previous iteration's mean scores
-- If mean regression exceeds 1 stddev: return to Step 5 and adjust
+- Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously using the same slot configs as Step 2, with post-edit run names (`<ITER_NAME>_dev_post_r1` through `<ITER_NAME>_dev_post_r<RUNS_PER_SPLIT>`); poll all in parallel until every slot reports completion
+- Apply paired t-test vs previous accepted iteration's DEV per-run means (same formula as `review/SKILL.md` Step 2)
+- If t < critical value for `<RUNS_PER_SPLIT>` on any metric: return to Step 5 and adjust
 
 ## Step 8: Run TEST Eval (only if DEV is satisfactory)
-Run TEST eval 3 times sequentially (`<ITER_NAME>_test_r1` through `_r3`):
-```sql
--- Run 1
-CALL EXECUTE_AI_EVALUATION(
-  'START',
-  OBJECT_CONSTRUCT('run_name', '<ITER_NAME>_test_r1'),
-  '@<STAGE_PATH>/eval_config_test.yaml'
-);
--- Wait for completion, then run 2 and 3 with _r2, _r3 suffixes
-```
+Fire all `<RUNS_PER_SPLIT>` TEST runs simultaneously using slot configs `eval_config_test_r1.yaml` through `eval_config_test_r<RUNS_PER_SPLIT>.yaml`. Poll all in parallel until every slot reports completion. Handle lock errors per-slot per `references/eval-setup.md`.
 
 ## Step 9: Log Results
 - Append iteration to `optimization_log.md` with this template:
@@ -135,7 +109,7 @@ CALL EXECUTE_AI_EVALUATION(
 ```markdown
 ## Iteration N
 
-**Run names:** `<ITER_NAME>_dev_r[1-3]`, `<ITER_NAME>_test_r[1-3]`
+**Run names:** `<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`, `<ITER_NAME>_test_r1` through `<ITER_NAME>_test_r<RUNS_PER_SPLIT>`
 
 **Changes made:**
 1. [Change description]

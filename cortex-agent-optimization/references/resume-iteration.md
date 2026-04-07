@@ -2,12 +2,23 @@
 
 If an optimization iteration is interrupted (network issue, timeout, stale version lock), use this workflow to resume from the last checkpoint.
 
-## Step 1: Identify Iteration State
+## Step 0: Check Log for In-Progress Markers (Fast Path)
 
-Check what completed:
+Before issuing any SQL, scan `optimization_log.md` for an `IN PROGRESS` entry for `<ITER_NAME>`:
+
+- `Status: Instructions edited, awaiting build/deploy` → **Checkpoint D** — skip to `optimize/SKILL.md` Step 6 (build and deploy)
+- `Status: Deployed, awaiting DEV post-eval` → **Checkpoint E** — skip to `optimize/SKILL.md` Step 7 (re-run DEV eval)
+
+If a matching marker is found, resume at the indicated step — no SQL queries needed.
+
+If no `IN PROGRESS` entry exists for `<ITER_NAME>`, fall through to Step 1 (SQL-based detection) to identify checkpoints A–C and F–G.
+
+## Step 1: Identify Iteration State (SQL Fallback)
+
+Check what completed. Build a UNION ALL query for all runs `<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>` (read `<RUNS_PER_SPLIT>` from `metadata.yaml`):
 
 ```sql
--- Check which DEV runs completed
+-- Repeat one SELECT block per run r1 through r<RUNS_PER_SPLIT>
 SELECT '<ITER_NAME>_dev_r1' AS RUN_NAME, COUNT(*) AS COMPLETED
 FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
   '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
@@ -16,14 +27,10 @@ UNION ALL
 SELECT '<ITER_NAME>_dev_r2', COUNT(*)
 FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
   '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r2'
-)) WHERE METRIC_NAME IS NOT NULL
-UNION ALL
-SELECT '<ITER_NAME>_dev_r3', COUNT(*)
-FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
-  '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r3'
 )) WHERE METRIC_NAME IS NOT NULL;
+-- ... add blocks through r<RUNS_PER_SPLIT>
 
--- Repeat for TEST runs (_test_r1, _test_r2, _test_r3)
+-- Repeat for TEST runs (_test_r1 through _test_r<RUNS_PER_SPLIT>)
 ```
 
 **Interpretation:**
@@ -35,29 +42,28 @@ FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
 | Checkpoint | What Completed | Resume Action |
 |-----------|----------------|---------------|
 | A | No DEV runs | Start from `optimize/SKILL.md` Step 2 |
-| B | DEV r1 only | Continue DEV r2 and r3 |
-| C | DEV r1, r2 only | Continue DEV r3 |
-| D | All 3 DEV runs | Proceed to Step 3 (failure analysis) |
-| E | Analysis done, instructions edited | Rebuild and deploy (Step 6) |
-| F | Deployed, no re-eval | Run re-eval DEV (Step 7) |
-| G | Re-eval DEV done | Run TEST eval (Step 8) |
-| H | TEST r1 only | Continue TEST r2 and r3 |
-| I | TEST r1, r2 only | Continue TEST r3 |
-| J | All 6 runs done | Proceed to `review/SKILL.md` |
+| B | k of `<RUNS_PER_SPLIT>` DEV runs (k < N) | Re-fire the incomplete runs simultaneously using their slot configs (`eval_config_dev_r<k+1>.yaml` through `eval_config_dev_r<N>.yaml`); poll all in parallel |
+| C | All `<RUNS_PER_SPLIT>` DEV runs | Proceed to Step 3 (failure analysis) |
+| D | Analysis done, instructions edited | Rebuild and deploy (Step 6) |
+| E | Deployed, no re-eval | Run re-eval DEV (Step 7) |
+| F | k of `<RUNS_PER_SPLIT>` TEST runs (k < N) | Re-fire incomplete TEST runs simultaneously using their slot configs (`eval_config_test_r<k+1>.yaml` through `eval_config_test_r<N>.yaml`) |
+| G | All `<RUNS_PER_SPLIT>` TEST runs done | Proceed to `review/SKILL.md` |
 
 ## Step 3: Clear Stale Locks if Needed
 
-If resuming after interruption, check for stale version locks:
+If a resumed run fails with "version already exists", clear only the stale lock on the specific slot that failed:
 
 ```sql
--- If next run fails with "version already exists", clear lock:
-ALTER DATASET <DATABASE>.<SCHEMA>.<DEV_DATASET_NAME>
+-- Clear the stale lock on the specific DEV slot that failed (replace _r<N> with the actual slot):
+ALTER DATASET <DATABASE>.<SCHEMA>.<DEV_DATASET_NAME>_r<N>
 DROP VERSION 'SYSTEM_AI_OBS_CORTEX_AGENT_DATASET_VERSION_DO_NOT_DELETE';
 
--- Repeat for TEST dataset if needed
-ALTER DATASET <DATABASE>.<SCHEMA>.<TEST_DATASET_NAME>
+-- Repeat for TEST slot if needed:
+ALTER DATASET <DATABASE>.<SCHEMA>.<TEST_DATASET_NAME>_r<N>
 DROP VERSION 'SYSTEM_AI_OBS_CORTEX_AGENT_DATASET_VERSION_DO_NOT_DELETE';
 ```
+
+Other slots are unaffected — only clear the specific slot that is stuck.
 
 **NEVER drop the dataset itself** — only drop stale version locks.
 

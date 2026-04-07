@@ -18,8 +18,10 @@ my_agent_project/
 ├── deploy.sql                              # Generated — do not edit by hand
 ├── optimization_log.md                     # Iteration history with scores and decisions
 ├── metadata.yaml                           # Agent database/schema/name, workspace config
-├── eval_config_dev.yaml                    # DEV split eval configuration
-├── eval_config_test.yaml                   # TEST split eval configuration
+├── eval_config_dev_r1.yaml                 # DEV slot 1 eval config
+├── eval_config_dev_r2.yaml                 # DEV slot 2 eval config (through r<RUNS_PER_SPLIT>)
+├── eval_config_test_r1.yaml                # TEST slot 1 eval config
+├── eval_config_test_r2.yaml                # TEST slot 2 eval config (through r<RUNS_PER_SPLIT>)
 ├── DEPLOYMENT_INSTRUCTIONS.md              # (Optional) project-specific workflow notes
 └── snapshots/                              # Versioned copies of agent/*.md per iteration
     └── baseline/                           # Original instructions before any optimization
@@ -41,8 +43,10 @@ agent_workspace/
 │   ├── deploy.sql
 │   ├── optimization_log.md
 │   ├── metadata.yaml
-│   ├── eval_config_dev.yaml
-│   ├── eval_config_test.yaml
+│   ├── eval_config_dev_r1.yaml
+│   ├── eval_config_dev_r2.yaml             (through r<RUNS_PER_SPLIT>)
+│   ├── eval_config_test_r1.yaml
+│   ├── eval_config_test_r2.yaml            (through r<RUNS_PER_SPLIT>)
 │   └── snapshots/
 │       └── baseline/
 │

@@ -1,7 +1,4 @@
 {
-  "models": {
-    "orchestration": "auto"
-  },
   "orchestration": {
     "budget": {
       "seconds": 300,
@@ -9,8 +6,29 @@
     }
   },
   "tools": [
-    {"type": "builtin", "tool_name": "search_tool"},
-    {"type": "builtin", "tool_name": "analyze_tool"},
-    {"type": "builtin", "tool_name": "query_tool"}
-  ]
+    {
+      "tool_spec": {
+        "type": "cortex_search",
+        "name": "search_tool"
+      }
+    },
+    {
+      "tool_spec": {
+        "type": "cortex_analyst_text_to_sql",
+        "name": "analyze_tool"
+      }
+    }
+  ],
+  "tool_resources": {
+    "search_tool": {
+      "name": "<DATABASE>.<SCHEMA>.<SEARCH_SERVICE>"
+    },
+    "analyze_tool": {
+      "semantic_view": "<DATABASE>.<SCHEMA>.<SEMANTIC_VIEW>",
+      "execution_environment": {
+        "type": "warehouse",
+        "warehouse": "<WAREHOUSE_NAME>"
+      }
+    }
+  }
 }

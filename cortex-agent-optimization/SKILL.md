@@ -13,7 +13,7 @@ description: >
 
 ## When to Use
 
-This skill applies when a user has (or wants to create) a Snowflake Cortex Agent with markdown-based instructions and wants to iteratively improve it using evaluations with a dev/test split. It covers the full optimization lifecycle: project scaffolding, eval dataset management, instruction editing guided by failure analysis, build/deploy, evaluation execution with statistical rigor (3 runs per split), and data-driven accept/reject decisions.
+This skill applies when a user has (or wants to create) a Snowflake Cortex Agent with markdown-based instructions and wants to iteratively improve it using evaluations with a dev/test split. It covers the full optimization lifecycle: project scaffolding, eval dataset management, instruction editing guided by failure analysis, build/deploy, evaluation execution with statistical rigor (configurable runs per split), and data-driven accept/reject decisions.
 
 ## Prerequisites
 
@@ -49,7 +49,16 @@ If intent is ambiguous, ask the user which mode they want.
 Detect or ask whether to run in **supervised** or **autonomous** mode:
 
 - **Supervised** (default): All `⚠️ STOP` gates are active. The user approves each decision before proceeding.
-- **Autonomous**: STOP gates are skipped. Cortex Code runs the full optimization loop until a termination condition is met. Stricter acceptance criteria apply (statistical significance required). Automated termination: 3 consecutive rejected iterations = stop and report remaining failures as known limitations.
+- **Autonomous**: STOP gates in Steps 4-5 are conditionally skipped:
+  - **Skip if:**
+    - All failures have a single unambiguous classification (no competing hypotheses)
+    - Proposed change touches ≤2 files
+    - Change follows established patterns from `references/optimization-patterns.md`
+  - **Present analysis and ask if:**
+    - Any failure has multiple plausible classifications
+    - Change touches 3+ files or deviates from known patterns
+  - **User can interrupt at any time** — autonomous mode is resumable, not uninterruptible
+  - **Termination:** 3 consecutive rejected iterations = stop and report remaining failures as known limitations
 
 Default to supervised if the user's preference is unclear.
 

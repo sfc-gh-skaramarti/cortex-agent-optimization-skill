@@ -125,7 +125,7 @@ Use this checklist to verify the skill is correctly built:
 - [ ] Total SKILL.md content (excluding references) is under 600 lines
 - [ ] All workflow steps have clear numbered actions
 - [ ] All mandatory stopping points are marked with `⚠️ STOP` (with mode annotation where applicable)
-- [ ] Multi-run methodology (3 runs) is documented in eval steps and references
+- [ ] Multi-run methodology (configurable `runs_per_split`) is documented in eval steps and references
 - [ ] Statistical acceptance criteria (mean + stddev) replace single-run comparisons
 - [ ] Decision tree for failure classification is present in optimize sub-skill
 - [ ] Autonomous mode termination condition (3 consecutive rejections) is documented
