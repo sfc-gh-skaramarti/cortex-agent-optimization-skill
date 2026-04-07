@@ -37,6 +37,24 @@ Load project context:
 
 ## Step 2: Run DEV Eval (if not already run this iteration)
 
+### Pre-flight: Ground Truth Completeness
+
+**MANDATORY before firing any eval runs.** Run the GT completeness check from `eval-data/SKILL.md` Workflow E against the DEV view:
+
+```sql
+SELECT 
+    COUNT(*) AS TOTAL_QUESTIONS,
+    COUNT_IF(GROUND_TRUTH IS NULL 
+             OR TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL
+             OR LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0) AS MISSING_GT
+FROM <DATABASE>.<SCHEMA>.AGENT_EVAL_DEV;
+```
+
+- If `MISSING_GT = 0`: proceed to fire eval runs.
+- If `MISSING_GT > 0`: **HARD STOP**. List the questions with `eval-data/SKILL.md` Workflow E Step 2 query. Do NOT fire eval runs — missing GT scores 0 and silently corrupts all metrics.
+
+### Fire DEV Eval Runs
+
 Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously — each uses its own slot config:
 ```sql
 -- Fire all simultaneously (do not wait between calls)
@@ -330,6 +348,23 @@ Apply the paired t-test to check for regression vs the previous accepted iterati
 Otherwise proceed to TEST.
 
 ## Step 8: Run TEST Eval (only if DEV is satisfactory)
+
+### Pre-flight: TEST Ground Truth Completeness
+
+Run the same GT completeness check against the TEST view before firing TEST runs:
+
+```sql
+SELECT 
+    COUNT(*) AS TOTAL_QUESTIONS,
+    COUNT_IF(GROUND_TRUTH IS NULL 
+             OR TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL
+             OR LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0) AS MISSING_GT
+FROM <DATABASE>.<SCHEMA>.AGENT_EVAL_TEST;
+```
+
+If `MISSING_GT > 0`: **HARD STOP** — same as Step 2 pre-flight.
+
+### Fire TEST Eval Runs
 
 Fire all `<RUNS_PER_SPLIT>` TEST runs simultaneously — each uses its own slot config:
 ```sql
