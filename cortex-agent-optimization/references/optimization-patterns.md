@@ -48,7 +48,7 @@ After 2-3 consecutive rejected iterations targeting the same failures, the agent
 LLM-based eval metrics have inherent variance from non-deterministic model responses. A +2% improvement on a single run can easily be noise. Running multiple evals and comparing means reduces the probability of accepting noise as signal or rejecting real improvements. The cost is N× eval time per iteration, which is justified for production agents where a wrong accept/reject decision wastes an entire iteration. See `setup/SKILL.md` for recommended `runs_per_split` values based on dataset size.
 
 ### 14. Classify failures with a decision tree, not intuition
-Follow a fixed diagnostic order: routing → tool error → formatting → content → ambiguity → model limit. This prevents the optimizer from jumping to instruction rewrites when the real problem is a tool error, or adding formatting rules when the issue is routing. Consistent classification also makes the optimization log more useful — you can track which *categories* of failure are decreasing across iterations.
+Follow a fixed diagnostic order: routing → tool error → formatting → content → ambiguity → instruction conflict → model limit. This prevents the optimizer from jumping to instruction rewrites when the real problem is a tool error, or adding formatting rules when the issue is routing. Consistent classification also makes the optimization log more useful — you can track which *categories* of failure are decreasing across iterations.
 
 ## Summary
 

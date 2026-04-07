@@ -79,9 +79,9 @@ Classify each failure using this ordered decision tree. Evaluate conditions top-
 
 5. **Re-read the current instructions that should govern this behavior.** If the instructions can reasonably be interpreted to produce the agent's (wrong) behavior → **Instruction ambiguity.** Fix: rewrite the ambiguous rule with a concrete example showing expected behavior.
 
-6. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
+6. **Check for conflicting instructions across agent files.** If the agent behavior suggests it is following one instruction that contradicts another (e.g., claiming tools are unavailable when tools are configured, asking for clarification when instructions say to proceed with defaults) → **Instruction conflict.** Fix: read all instruction files (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`), identify the conflicting pattern, remove or rephrase to align with intended behavior.
 
-7. **Check for conflicting instructions across agent files.** If the agent behavior suggests it is following one instruction that contradicts another (e.g., claiming tools are unavailable when tools are configured, asking for clarification when instructions say to proceed with defaults) → **Instruction conflict.** Fix: read all instruction files (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`), identify the conflicting pattern, remove or rephrase to align with intended behavior.
+7. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
 
 For questions that failed in only 1 of `<RUNS_PER_SPLIT>` runs: classify as **Intermittent** — these are noise and should generally not drive instruction changes unless a clear pattern emerges across multiple questions.
 

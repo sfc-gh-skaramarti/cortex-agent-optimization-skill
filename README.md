@@ -11,7 +11,7 @@ Key properties:
 - **Dev/Test Split**: ~45% DEV / ~55% TEST, stratified per category. DEV failures guide changes; TEST validates generalization.
 - **Multiple Runs**: Configurable `runs_per_split` per evaluation captures model response variance. Decisions use a one-sided paired t-test across per-run means.
 - **Statistical Acceptance**: ACCEPT if one-sided paired t-test (α=0.10) passes. REJECT on any regression.
-- **Failure Classification**: Ordered decision tree (routing → tool error → formatting → content → instruction ambiguity → model limit → instruction conflict).
+- **Failure Classification**: Ordered decision tree (routing → tool error → formatting → content → instruction ambiguity → instruction conflict → model limit).
 - **Snapshot Versioning**: File-based snapshots of agent instructions at each accepted iteration, with rollback on rejection.
 - **Execution Modes**: Supervised (all stop gates active) or autonomous (stricter criteria, automated termination after 3 consecutive rejections).
 
