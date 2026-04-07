@@ -1,7 +1,7 @@
 ---
 section: "4.6"
 title: "references/project-structure.md"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Project Structure Reference

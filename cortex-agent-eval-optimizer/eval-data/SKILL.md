@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-eval-data
+name: cortex-agent-eval-optimizer-eval-data
 description: "Create, validate, and re-balance dev/test eval splits for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 This sub-skill has four workflows. Detect which the user wants, or default to **Validate** if an eval table already exists with a SPLIT column.
@@ -170,3 +170,62 @@ WHERE TEST_CATEGORY = '<SMALL_CATEGORY>';
 ### Step 4: Re-validate
 
 After execution, re-run Workflow B (Validate Split) to confirm all quality checks now pass.
+
+---
+
+## Workflow E: Validate Ground Truth Completeness
+
+**CRITICAL — Run this before every eval execution.** Missing ground truth causes the evaluator to return `{"code":400,"message":"Missing ground truth"}` and score 0 for the question. This silently corrupts aggregate metrics — a 50% GT fill rate makes a 0.90-quality agent look like 0.45.
+
+### Step 1: Check Completeness
+
+```sql
+SELECT 
+    SPLIT,
+    COUNT(*) AS TOTAL_QUESTIONS,
+    COUNT_IF(GROUND_TRUTH IS NULL) AS NULL_GT,
+    COUNT_IF(GROUND_TRUTH IS NOT NULL 
+             AND TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL) AS EMPTY_GT_OUTPUT,
+    COUNT_IF(GROUND_TRUTH IS NOT NULL 
+             AND TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NOT NULL
+             AND LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0) AS BLANK_GT_OUTPUT,
+    TOTAL_QUESTIONS - NULL_GT - EMPTY_GT_OUTPUT - BLANK_GT_OUTPUT AS VALID_GT
+FROM <EVAL_TABLE>
+GROUP BY SPLIT
+ORDER BY SPLIT;
+```
+
+### Step 2: Gate Decision
+
+| Condition | Action |
+|-----------|--------|
+| **VALID_GT = TOTAL_QUESTIONS** for all splits | **PASS** — proceed with eval |
+| **Any NULL_GT > 0 or EMPTY_GT_OUTPUT > 0 or BLANK_GT_OUTPUT > 0** | **HARD STOP** — list affected questions, do NOT run eval |
+
+If HARD STOP, list every question missing ground truth:
+```sql
+SELECT TEST_ID, SPLIT, INPUT_QUERY,
+       CASE 
+         WHEN GROUND_TRUTH IS NULL THEN 'NULL'
+         WHEN TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL THEN 'MISSING ground_truth_output key'
+         WHEN LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0 THEN 'BLANK ground_truth_output'
+       END AS GT_ISSUE
+FROM <EVAL_TABLE>
+WHERE GROUND_TRUTH IS NULL
+   OR TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL
+   OR LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0
+ORDER BY SPLIT, TEST_ID;
+```
+
+> **Why this matters:** In a real optimization cycle, 10/18 DEV questions with missing GT produced a fake baseline of 0.33 — the true score was 0.69. Six eval runs, failure analysis, and iteration planning were wasted before the GT gap was discovered. This gate prevents that.
+
+### Step 3: Remediate
+
+For each question missing GT:
+1. Run the question against the agent (or query the underlying data directly) to determine the correct answer
+2. Write ground truth as: `{"ground_truth_output": "<accurate answer text>"}`
+3. Optionally add `ground_truth_invocations` for tool-sequence validation
+4. UPDATE the eval table row
+5. Re-run Step 1 to confirm all gaps are filled
+
+**⚠️ STOP**: Do not proceed to eval execution until Step 1 shows VALID_GT = TOTAL_QUESTIONS for ALL splits.

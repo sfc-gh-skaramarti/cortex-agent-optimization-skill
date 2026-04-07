@@ -1,7 +1,7 @@
 ---
 section: "4.1"
 title: "SKILL.md — Entry Point"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Entry Point Skill Contract
@@ -10,7 +10,7 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization
+name: cortex-agent-eval-optimizer
 description: >
   Iterative optimization of Snowflake Cortex Agents using dev/test eval splits.
   Covers project setup, instruction editing, build/deploy, eval execution,
@@ -18,7 +18,9 @@ description: >
   Use when: optimizing agent instructions, running agent evals, improving agent
   accuracy, setting up eval splits, analyzing agent failures.
   Triggers: optimize agent, agent eval, improve agent, agent iteration,
-  run eval, optimization loop, agent instructions, eval split.
+  run eval, optimization loop, agent instructions, eval split,
+  run optimization, next iteration, analyze agent failures, accept reject iteration,
+  resume iteration.
 ---
 ```
 
@@ -33,7 +35,7 @@ description: >
 
 3. **Setup** — Load `references/project-structure.md` for context on expected layout.
 
-4. **Intent Detection Table** — The routing table from Section 3 above, with "Load `<sub-skill>` and follow its workflow" directives.
+4. **Intent Detection Table** — The routing table from Section 3 above, with "Load `<sub-skill>` and follow its workflow" directives. The OPTIMIZE route should include "resume iteration" as a trigger phrase in addition to the others.
 
 5. **Execution Mode** — Detect or ask whether to run in **supervised** mode (all `⚠️ STOP` gates active, user approves each decision) or **autonomous** mode (stops skipped, Cortex Code runs the full optimization loop until a termination condition is met). Default to supervised if unclear. In autonomous mode, apply stricter acceptance criteria (statistical significance required) and enforce automated termination (3 consecutive rejections = stop and report).
 

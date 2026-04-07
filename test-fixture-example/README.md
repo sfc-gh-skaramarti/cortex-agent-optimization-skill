@@ -6,7 +6,7 @@ This directory contains a minimal example for testing the build script workflow.
 
 ```
 test-fixture-example/
-├── agent/ -> ../cortex-agent-optimization/references/agent-template/  (symlink)
+├── agent/ -> ../cortex-agent-eval-optimizer/references/agent-template/  (symlink)
 │   ├── orchestration_instructions.md   # Minimal routing example
 │   ├── response_instructions.md        # Minimal format example
 │   ├── tool_descriptions.md            # 3 tool descriptions
@@ -17,7 +17,7 @@ test-fixture-example/
 └── README.md                            # This file
 ```
 
-**Note:** The `agent/` directory is a symlink to the canonical templates in `cortex-agent-optimization/references/agent-template/`. This maintains a single source of truth while allowing the build script to work without modification.
+**Note:** The `agent/` directory is a symlink to the canonical templates in `cortex-agent-eval-optimizer/references/agent-template/`. This maintains a single source of truth while allowing the build script to work without modification.
 
 ## Testing the Build Script
 
@@ -67,7 +67,7 @@ Run through this checklist to verify the build script works correctly:
 - [ ] **HTML comments removed**: Check `instructions.orchestration` has no `<!-- -->` comments
 - [ ] **Top-level headings stripped**: Check `instructions` have no `# Title` lines
 - [ ] **Tool descriptions mapped**: Each tool in `spec.tools` has `tool_spec.description`
-- [ ] **Base spec preserved**: `models`, `orchestration.budget`, `tools` array intact
+- [ ] **Base spec preserved**: `orchestration.budget`, `tools` array, and `tool_resources` intact
 - [ ] **SQL syntax valid**: ALTER AGENT statement has proper `$$` delimiters
 - [ ] **Metadata parsed**: Agent FQN in SQL matches metadata.yaml values
 
@@ -80,9 +80,6 @@ ALTER AGENT TEST_DB.PUBLIC.TEST_AGENT
 MODIFY LIVE VERSION
 SET SPECIFICATION = $$
 {
-  "models": {
-    "orchestration": "auto"
-  },
   "orchestration": {
     "budget": {
       "seconds": 300,
@@ -95,14 +92,32 @@ SET SPECIFICATION = $$
   },
   "tools": [
     {
-      "type": "builtin",
-      "tool_name": "search_tool",
       "tool_spec": {
+        "type": "cortex_search",
+        "name": "search_tool",
         "description": "Search internal documentation and knowledge base..."
       }
     },
-    ...
-  ]
+    {
+      "tool_spec": {
+        "type": "cortex_analyst_text_to_sql",
+        "name": "analyze_tool",
+        "description": "Analyze structured data using natural language..."
+      }
+    }
+  ],
+  "tool_resources": {
+    "search_tool": {
+      "name": "DATABASE.SCHEMA.SEARCH_SERVICE"
+    },
+    "analyze_tool": {
+      "semantic_view": "DATABASE.SCHEMA.SEMANTIC_VIEW",
+      "execution_environment": {
+        "type": "warehouse",
+        "warehouse": "WAREHOUSE_NAME"
+      }
+    }
+  }
 }
 $$;
 ```

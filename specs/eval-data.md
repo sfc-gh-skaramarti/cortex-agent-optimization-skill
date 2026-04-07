@@ -1,7 +1,7 @@
 ---
 section: "4.5"
 title: "eval-data/SKILL.md — Eval Dataset Splits"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Eval Dataset Splits Contract
@@ -10,9 +10,9 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization-eval-data
+name: cortex-agent-eval-optimizer-eval-data
 description: "Create, validate, and re-balance dev/test eval splits for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 ```
 

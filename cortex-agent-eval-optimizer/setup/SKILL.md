@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-setup
+name: cortex-agent-eval-optimizer-setup
 description: "Scaffold an optimization project for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Discover Agent and Workspace
@@ -132,7 +132,14 @@ CREATE OR REPLACE VIEW <DATABASE>.<SCHEMA>.AGENT_EVAL_TEST AS
 SELECT * FROM <EVAL_TABLE> WHERE SPLIT = '<TEST_SPLIT_VALUE>';
 ```
 
-**⚠️ STOP**: Review eval questions and split distribution with the user.
+### Ground Truth Completeness Gate
+
+**MANDATORY before proceeding to Step 5.** Run `eval-data/SKILL.md` Workflow E (Validate Ground Truth Completeness) against `<EVAL_TABLE>`. This checks that every question has a non-empty `ground_truth_output` in its GROUND_TRUTH JSON.
+
+- If **PASS**: proceed to Step 5.
+- If **HARD STOP**: list the questions with missing GT. The user must fill them before eval configs are created. Do NOT skip this — missing GT produces score 0 per question and silently corrupts all aggregate metrics.
+
+**⚠️ STOP**: Review eval questions, split distribution, and GT completeness with the user.
 
 ## Step 5: Create Eval Configs
 

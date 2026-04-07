@@ -1,6 +1,8 @@
-# Cortex Agent Optimization Skill
+# Cortex Agent Eval Optimizer Skill
 
 A Cortex Code skill that guides iterative optimization of Snowflake Cortex Agents using dev/test evaluation splits.
+
+> **Note:** This is a custom Cortex Code skill, distinct from the bundled `optimize-cortex-agent` sub-skill. See [Related Bundled Skills](#related-bundled-skills) for a comparison of when to use each.
 
 ## How It Works
 
@@ -11,14 +13,14 @@ Key properties:
 - **Dev/Test Split**: ~45% DEV / ~55% TEST, stratified per category. DEV failures guide changes; TEST validates generalization.
 - **Multiple Runs**: Configurable `runs_per_split` per evaluation captures model response variance. Decisions use a one-sided paired t-test across per-run means.
 - **Statistical Acceptance**: ACCEPT if one-sided paired t-test (α=0.10) passes. REJECT on any regression.
-- **Failure Classification**: Ordered decision tree (routing → tool error → formatting → content → instruction ambiguity → model limit).
+- **Failure Classification**: Ordered decision tree (routing → tool error → formatting → content → instruction ambiguity → instruction conflict → model limit).
 - **Snapshot Versioning**: File-based snapshots of agent instructions at each accepted iteration, with rollback on rejection.
 - **Execution Modes**: Supervised (all stop gates active) or autonomous (stricter criteria, automated termination after 3 consecutive rejections).
 
 ## Skill Structure
 
 ```
-cortex-agent-optimization/
+cortex-agent-eval-optimizer/
 ├── SKILL.md                          # Entry point and routing
 ├── setup/SKILL.md                    # Agent discovery, source-of-truth, baseline eval
 ├── optimize/SKILL.md                 # DEV eval → failure analysis → edit → re-eval loop
@@ -43,11 +45,11 @@ cortex-agent-optimization/
 
 ## Specification
 
-The full design specification is in `cortex-agent-optimization-spec.md`. All skill files reference the spec section they implement.
+The full design specification is in `cortex-agent-eval-optimizer-spec.md`. All skill files reference the spec section they implement.
 
 ## Related Bundled Skills
 
-This skill provides **statistical rigor and reproducibility** for agent optimization through dev/test splits, 3-run evaluations, and quantitative acceptance criteria (±1σ improvement).
+This skill provides **statistical rigor and reproducibility** for agent optimization through dev/test splits, multi-run evaluations, and quantitative acceptance criteria (one-sided paired t-test, α=0.10).
 
 ### Complementary Workflows
 
@@ -65,7 +67,7 @@ This skill provides **statistical rigor and reproducibility** for agent optimiza
 
 ### Choosing Between Optimization Approaches
 
-**Use this skill (`cortex-agent-optimization`) when:**
+**Use this skill (`cortex-agent-eval-optimizer`) when:**
 - You need reproducible, quantitative metrics
 - You want automated acceptance criteria (statistical thresholds)
 - You're optimizing for generalization (dev/test methodology prevents overfitting)

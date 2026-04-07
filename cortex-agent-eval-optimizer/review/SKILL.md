@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-review
+name: cortex-agent-eval-optimizer-review
 description: "Review iteration results and make accept/reject decision."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Compute Per-Run Means
@@ -16,7 +16,12 @@ SELECT '<ITER_NAME>_dev_r1' AS RUN, METRIC_NAME,
        AVG(EVAL_AGG_SCORE) AS MEAN
 FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
   '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
-)) WHERE METRIC_NAME IS NOT NULL GROUP BY METRIC_NAME;
+))
+WHERE METRIC_NAME IS NOT NULL
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Missing ground truth%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%LLM error%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Evaluation failed%'
+GROUP BY METRIC_NAME;
 ```
 
 Run the same structure for TEST (`<ITER_NAME>_test_r1` through `_r<RUNS_PER_SPLIT>`), and for the previous accepted iteration's DEV and TEST runs (using the previous iter name from `optimization_log.md`).

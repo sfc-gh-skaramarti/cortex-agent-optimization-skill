@@ -1,7 +1,7 @@
 ---
 section: "4.2"
 title: "setup/SKILL.md — Project Scaffolding"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Setup Workflow Contract
@@ -10,9 +10,9 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization-setup
+name: cortex-agent-eval-optimizer-setup
 description: "Scaffold an optimization project for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 ```
 
@@ -23,12 +23,15 @@ parent_skill: cortex-agent-optimization
   - Agent fully-qualified name (`<DATABASE>.<SCHEMA>.<AGENT_NAME>`)
   - Snowflake connection name
   - **Workspace directory** (required, no CWD default) — prompt: "Where should I create the optimization project?"
+  - **Execution mode** (`<EXECUTION_MODE>`: `supervised` or `autonomous`, default: `supervised`)
+  - **`<RUNS_PER_SPLIT>`** — number of eval runs per split per iteration. After detecting eval dataset size (Step 4), recommend based on question count: <20 → 6, 20–50 → 4, 50–100 → 3 (default), >100 → 3. Present recommendation; user may override.
+- Load `<WORKSPACE_ROOT>/<AGENT_DIR>/DEPLOYMENT_INSTRUCTIONS.md` if it exists, for project-specific workflow details
 - Validate workspace is NOT inside the skill directory
 - Detect workspace mode:
   - If `<WORKSPACE_ROOT>/scripts/build_agent_spec.py` exists → multi-agent workspace
   - Otherwise → single-agent project
 - If multi-agent detected, ask for agent subdirectory name (default: lowercase agent name)
- - Run `cortex agents describe <AGENT_FQN>` (CLI, not SQL) to retrieve current spec; fall back to `snow sql` if unavailable
+- Run `cortex agents describe <AGENT_FQN>` (CLI, not SQL) to retrieve current spec; fall back to `snow sql` if unavailable
 - Extract current instructions and tool configuration
 
 **⚠️ STOP**: Confirm agent details and workspace setup with user.
@@ -108,7 +111,6 @@ parent_skill: cortex-agent-optimization
 
 ## Step 7: Run Baseline Eval
 - Build and deploy current instructions (to confirm the pipeline works)
-- Collect `runs_per_split` from user — recommend based on dataset size: <20 questions → 6, 20-50 → 4, 50-100 → 3 (default), >100 → 3
 - Fire all `<RUNS_PER_SPLIT>` DEV baseline runs simultaneously, each using its slot config (`eval_config_dev_r1.yaml` through `eval_config_dev_r<RUNS_PER_SPLIT>.yaml`); poll all in parallel until every slot reports completion
 - Fire all `<RUNS_PER_SPLIT>` TEST baseline runs simultaneously using the TEST slot configs; poll all in parallel until all complete
 - Compute mean and stddev per metric across all `<RUNS_PER_SPLIT>` runs for each split

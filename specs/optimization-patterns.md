@@ -1,7 +1,7 @@
 ---
 section: "4.8"
 title: "references/optimization-patterns.md"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Optimization Patterns
@@ -54,6 +54,6 @@ Distilled learnings from real optimization work (6 iterations on a production ag
     LLM-based eval metrics have inherent variance from non-deterministic model responses. A +2% improvement on a single run can easily be noise. Running multiple evals and comparing per-run means via a paired t-test reduces the probability of accepting noise as signal or rejecting real improvements. See `setup/SKILL.md` for the recommended `runs_per_split` based on dataset size. The cost is N× eval time per iteration, which is justified for production agents where a wrong accept/reject decision wastes an entire iteration.
 
 14. **Classify failures with a decision tree, not intuition.**
-    Follow a fixed diagnostic order: routing → tool error → formatting → content → ambiguity → model limit. This prevents the optimizer from jumping to instruction rewrites when the real problem is a tool error, or adding formatting rules when the issue is routing. Consistent classification also makes the optimization log more useful — you can track which *categories* of failure are decreasing across iterations.
+    Follow a fixed diagnostic order: routing → tool error → formatting → content → ambiguity → instruction conflict → model limit. This prevents the optimizer from jumping to instruction rewrites when the real problem is a tool error, or adding formatting rules when the issue is routing. Consistent classification also makes the optimization log more useful — you can track which *categories* of failure are decreasing across iterations.
 
 **Target length:** ~100-120 lines.

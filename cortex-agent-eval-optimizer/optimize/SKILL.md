@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-iterate
+name: cortex-agent-eval-optimizer-iterate
 description: "Run a single optimization iteration: analyze DEV failures, edit instructions, build/deploy, eval."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Read Context
@@ -36,6 +36,24 @@ Load project context:
 4. **Otherwise:** Resume from the identified checkpoint per `references/resume-iteration.md`
 
 ## Step 2: Run DEV Eval (if not already run this iteration)
+
+### Pre-flight: Ground Truth Completeness
+
+**MANDATORY before firing any eval runs.** Run the GT completeness check from `eval-data/SKILL.md` Workflow E against the DEV view:
+
+```sql
+SELECT 
+    COUNT(*) AS TOTAL_QUESTIONS,
+    COUNT_IF(GROUND_TRUTH IS NULL 
+             OR TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL
+             OR LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0) AS MISSING_GT
+FROM <DATABASE>.<SCHEMA>.AGENT_EVAL_DEV;
+```
+
+- If `MISSING_GT = 0`: proceed to fire eval runs.
+- If `MISSING_GT > 0`: **HARD STOP**. List the questions with `eval-data/SKILL.md` Workflow E Step 2 query. Do NOT fire eval runs — missing GT scores 0 and silently corrupts all metrics.
+
+### Fire DEV Eval Runs
 
 Fire all `<RUNS_PER_SPLIT>` DEV runs simultaneously — each uses its own slot config:
 ```sql
@@ -87,26 +105,36 @@ Then poll all runs in parallel using the parallel polling pattern from `referenc
 ## Step 3: Analyze DEV Failures
 
 Query aggregate results across all `<RUNS_PER_SPLIT>` DEV runs. Build a UNION ALL query with one SELECT block per run (`<ITER_NAME>_dev_r1` through `<ITER_NAME>_dev_r<RUNS_PER_SPLIT>`):
+
+**Important — exclude two categories of non-representative rows before aggregating:**
+- `METRIC_CALLS LIKE '%Missing ground truth%'` — AC cannot be scored on invocations-only rows (no `ground_truth_output`); these always return 0 and are dataset gaps, not agent failures.
+- `METRIC_CALLS LIKE '%LLM error%' OR LIKE '%Evaluation failed%'` — the LLM judge hit an error (e.g. token limit on long traces); these always return 0 and are infrastructure failures, not agent failures.
+
+The Snowflake UI excludes these rows automatically. Your queries must do the same or scores will appear far lower than the UI shows.
+
 ```sql
 SELECT METRIC_NAME,
        ROUND(AVG(EVAL_AGG_SCORE) * 100, 1) AS MEAN_SCORE_PCT,
        ROUND(STDDEV(EVAL_AGG_SCORE) * 100, 1) AS STDDEV_PCT,
        COUNT(*) AS N
 FROM (
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  SELECT METRIC_NAME, EVAL_AGG_SCORE, METRIC_CALLS FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
     '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r1'
   ))
   UNION ALL
-  SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  SELECT METRIC_NAME, EVAL_AGG_SCORE, METRIC_CALLS FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
     '<DATABASE>', '<SCHEMA>', '<AGENT_NAME>', 'CORTEX AGENT', '<ITER_NAME>_dev_r2'
   ))
   -- ... add one UNION ALL block per run through r<RUNS_PER_SPLIT>
 )
 WHERE METRIC_NAME IS NOT NULL
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Missing ground truth%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%LLM error%'
+  AND METRIC_CALLS::VARCHAR NOT LIKE '%Evaluation failed%'
 GROUP BY METRIC_NAME;
 ```
 
-For per-question failure analysis, query individual question scores across all `<RUNS_PER_SPLIT>` runs. Filter to questions where **mean** `EVAL_AGG_SCORE` across the runs is `< 1.0`.
+For per-question failure analysis, query individual question scores across all `<RUNS_PER_SPLIT>` runs. Apply the same artifact exclusion filter (`METRIC_CALLS` filters above). Filter to questions where **mean** `EVAL_AGG_SCORE` across the scoreable runs is `< 1.0`.
 
 Distinguish failure confidence:
 - **High-confidence failures**: Failed in all `<RUNS_PER_SPLIT>` runs — these drive instruction changes.
@@ -139,9 +167,9 @@ Classify each high-confidence failure using this ordered decision tree. Evaluate
 
 5. **Re-read the current instructions that should govern this behavior.** If the instructions can reasonably be interpreted to produce the agent's (wrong) behavior → **Instruction ambiguity.** Fix: rewrite the ambiguous rule with a concrete example showing expected behavior.
 
-6. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
+6. **Check for conflicting instructions across agent files.** If the agent behavior suggests it's following one instruction that contradicts another (e.g., claiming tools are unavailable when tools are configured, or asking for clarification when instructions say to proceed with defaults) → **Instruction conflict.** Fix: Read all instruction files (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`), identify the conflicting pattern, remove or rephrase it to align with intended behavior.
 
-7. **Check for conflicting instructions across agent files.** If the agent behavior suggests it's following one instruction that contradicts another (e.g., claiming tools are unavailable when tools are configured, or asking for clarification when instructions say to proceed with defaults) → **Instruction conflict.** Fix: Read all instruction files (`orchestration_instructions.md`, `response_instructions.md`, `tool_descriptions.md`), identify the conflicting pattern, remove or rephrase it to align with intended behavior.
+7. **Check the optimization log for this failure pattern.** If the same failure has persisted across 2+ prior iterations despite targeted fixes → **Model behavior limit.** Fix: consider architectural changes (tool guardrails, workflow restructuring) or document as a known limitation.
 
 For questions that failed in only 1 of `<RUNS_PER_SPLIT>` runs: classify as **Intermittent** — noise that should not drive instruction changes unless a clear cross-question pattern emerges.
 
@@ -282,9 +310,13 @@ FROM (
   -- UNION ALL of per-run means for dev_r1..rN and dev_post_r1..rN
   SELECT '<ITER_NAME>_dev_r1' AS RUN_NAME, AVG(EVAL_AGG_SCORE) AS MEAN_SCORE
   FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(..., '<ITER_NAME>_dev_r1'))
-  WHERE METRIC_NAME = 'logical_consistency' GROUP BY 1
+  WHERE METRIC_NAME = 'logical_consistency'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%Missing ground truth%'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%LLM error%'
+    AND METRIC_CALLS::VARCHAR NOT LIKE '%Evaluation failed%'
+  GROUP BY 1
   UNION ALL
-  -- Repeat for all runs
+  -- Repeat for all runs (apply same METRIC_CALLS filters in each block)
 )
 HAVING ABS(pre_mean - post_mean) >= 0.03;  -- Expect at least 3% change
 ```
@@ -316,6 +348,23 @@ Apply the paired t-test to check for regression vs the previous accepted iterati
 Otherwise proceed to TEST.
 
 ## Step 8: Run TEST Eval (only if DEV is satisfactory)
+
+### Pre-flight: TEST Ground Truth Completeness
+
+Run the same GT completeness check against the TEST view before firing TEST runs:
+
+```sql
+SELECT 
+    COUNT(*) AS TOTAL_QUESTIONS,
+    COUNT_IF(GROUND_TRUTH IS NULL 
+             OR TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING IS NULL
+             OR LEN(TRIM(TRY_PARSE_JSON(GROUND_TRUTH):ground_truth_output::STRING)) = 0) AS MISSING_GT
+FROM <DATABASE>.<SCHEMA>.AGENT_EVAL_TEST;
+```
+
+If `MISSING_GT > 0`: **HARD STOP** — same as Step 2 pre-flight.
+
+### Fire TEST Eval Runs
 
 Fire all `<RUNS_PER_SPLIT>` TEST runs simultaneously — each uses its own slot config:
 ```sql
