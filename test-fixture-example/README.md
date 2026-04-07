@@ -6,7 +6,7 @@ This directory contains a minimal example for testing the build script workflow.
 
 ```
 test-fixture-example/
-├── agent/ -> ../cortex-agent-optimization/references/agent-template/  (symlink)
+├── agent/ -> ../cortex-agent-eval-optimizer/references/agent-template/  (symlink)
 │   ├── orchestration_instructions.md   # Minimal routing example
 │   ├── response_instructions.md        # Minimal format example
 │   ├── tool_descriptions.md            # 3 tool descriptions
@@ -17,7 +17,7 @@ test-fixture-example/
 └── README.md                            # This file
 ```
 
-**Note:** The `agent/` directory is a symlink to the canonical templates in `cortex-agent-optimization/references/agent-template/`. This maintains a single source of truth while allowing the build script to work without modification.
+**Note:** The `agent/` directory is a symlink to the canonical templates in `cortex-agent-eval-optimizer/references/agent-template/`. This maintains a single source of truth while allowing the build script to work without modification.
 
 ## Testing the Build Script
 

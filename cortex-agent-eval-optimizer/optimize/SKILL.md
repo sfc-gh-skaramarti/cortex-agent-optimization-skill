@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-iterate
+name: cortex-agent-eval-optimizer-iterate
 description: "Run a single optimization iteration: analyze DEV failures, edit instructions, build/deploy, eval."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Read Context

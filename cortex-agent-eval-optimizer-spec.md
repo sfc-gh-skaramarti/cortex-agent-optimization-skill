@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Skill name** | `cortex-agent-optimization` |
+| **Skill name** | `cortex-agent-eval-optimizer` |
 | **Purpose** | Iterative optimization of Snowflake Cortex Agents using dev/test eval splits. Guides users through editing agent instructions, building/deploying, running evaluations, analyzing failures, and making data-driven accept/reject decisions. |
 | **Trigger phrases** | optimize agent, agent eval, improve agent, agent iteration, run eval, optimization loop, agent instructions, eval split, run optimization, next iteration, analyze agent failures, accept reject iteration |
 
@@ -13,7 +13,7 @@
 ## 2. Skill Directory Structure
 
 ```
-cortex-agent-optimization/
+cortex-agent-eval-optimizer/
 ├── SKILL.md                              # Entry point: intent detection + routing
 ├── setup/
 │   └── SKILL.md                          # Sub-skill: scaffold optimization project
@@ -117,7 +117,7 @@ Use this checklist to verify the skill is correctly built:
 - [ ] All 8 files exist in the directory tree (SKILL.md + 4 sub-skills + 3 references)
 - [ ] Every file in the directory tree has a corresponding implementation
 - [ ] Frontmatter on all SKILL.md files has `name` and `description`
-- [ ] Sub-skills have `parent_skill: cortex-agent-optimization`
+- [ ] Sub-skills have `parent_skill: cortex-agent-eval-optimizer`
 
 ### Content
 - [ ] Top-level SKILL.md is under 100 lines

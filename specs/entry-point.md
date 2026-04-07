@@ -1,7 +1,7 @@
 ---
 section: "4.1"
 title: "SKILL.md — Entry Point"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Entry Point Skill Contract
@@ -10,7 +10,7 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization
+name: cortex-agent-eval-optimizer
 description: >
   Iterative optimization of Snowflake Cortex Agents using dev/test eval splits.
   Covers project setup, instruction editing, build/deploy, eval execution,

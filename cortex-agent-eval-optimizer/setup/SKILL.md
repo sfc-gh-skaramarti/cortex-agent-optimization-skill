@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-setup
+name: cortex-agent-eval-optimizer-setup
 description: "Scaffold an optimization project for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Discover Agent and Workspace

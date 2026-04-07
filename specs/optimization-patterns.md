@@ -1,7 +1,7 @@
 ---
 section: "4.8"
 title: "references/optimization-patterns.md"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Optimization Patterns

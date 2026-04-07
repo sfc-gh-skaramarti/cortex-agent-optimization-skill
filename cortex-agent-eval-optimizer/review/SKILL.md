@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-review
+name: cortex-agent-eval-optimizer-review
 description: "Review iteration results and make accept/reject decision."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 ## Step 1: Compute Per-Run Means

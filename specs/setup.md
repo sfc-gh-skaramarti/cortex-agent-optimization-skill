@@ -1,7 +1,7 @@
 ---
 section: "4.2"
 title: "setup/SKILL.md — Project Scaffolding"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Setup Workflow Contract
@@ -10,9 +10,9 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization-setup
+name: cortex-agent-eval-optimizer-setup
 description: "Scaffold an optimization project for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 ```
 

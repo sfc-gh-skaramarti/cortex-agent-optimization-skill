@@ -1,7 +1,7 @@
 ---
 section: "4.3"
 title: "optimize/SKILL.md — Run an Optimization Iteration"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Run an Optimization Iteration Contract
@@ -10,9 +10,9 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization-iterate
+name: cortex-agent-eval-optimizer-iterate
 description: "Run a single optimization iteration: analyze DEV failures, edit instructions, build/deploy, eval."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 ```
 

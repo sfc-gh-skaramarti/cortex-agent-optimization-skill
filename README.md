@@ -20,7 +20,7 @@ Key properties:
 ## Skill Structure
 
 ```
-cortex-agent-optimization/
+cortex-agent-eval-optimizer/
 ├── SKILL.md                          # Entry point and routing
 ├── setup/SKILL.md                    # Agent discovery, source-of-truth, baseline eval
 ├── optimize/SKILL.md                 # DEV eval → failure analysis → edit → re-eval loop
@@ -45,7 +45,7 @@ cortex-agent-optimization/
 
 ## Specification
 
-The full design specification is in `cortex-agent-optimization-spec.md`. All skill files reference the spec section they implement.
+The full design specification is in `cortex-agent-eval-optimizer-spec.md`. All skill files reference the spec section they implement.
 
 ## Related Bundled Skills
 
@@ -67,7 +67,7 @@ This skill provides **statistical rigor and reproducibility** for agent optimiza
 
 ### Choosing Between Optimization Approaches
 
-**Use this skill (`cortex-agent-optimization`) when:**
+**Use this skill (`cortex-agent-eval-optimizer`) when:**
 - You need reproducible, quantitative metrics
 - You want automated acceptance criteria (statistical thresholds)
 - You're optimizing for generalization (dev/test methodology prevents overfitting)

@@ -1,7 +1,7 @@
 ---
 section: "4.2.1"
 title: "Workspace Mode Detection"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Workspace Mode Detection

@@ -1,7 +1,7 @@
 ---
-name: cortex-agent-optimization-eval-data
+name: cortex-agent-eval-optimizer-eval-data
 description: "Create, validate, and re-balance dev/test eval splits for a Cortex Agent."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 
 This sub-skill has four workflows. Detect which the user wants, or default to **Validate** if an eval table already exists with a SPLIT column.

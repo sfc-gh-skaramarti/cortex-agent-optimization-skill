@@ -1,7 +1,7 @@
 ---
 section: "4.4"
 title: "review/SKILL.md — Accept/Reject Decision"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Accept/Reject Decision Contract
@@ -10,9 +10,9 @@ parent_spec: "../cortex-agent-optimization-spec.md"
 
 ```yaml
 ---
-name: cortex-agent-optimization-review
+name: cortex-agent-eval-optimizer-review
 description: "Review iteration results and make accept/reject decision."
-parent_skill: cortex-agent-optimization
+parent_skill: cortex-agent-eval-optimizer
 ---
 ```
 

@@ -1,7 +1,7 @@
 ---
 section: "4.7"
 title: "references/eval-setup.md"
-parent_spec: "../cortex-agent-optimization-spec.md"
+parent_spec: "../cortex-agent-eval-optimizer-spec.md"
 ---
 
 # Evaluation Setup Reference

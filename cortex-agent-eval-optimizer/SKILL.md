@@ -1,5 +1,5 @@
 ---
-name: cortex-agent-optimization
+name: cortex-agent-eval-optimizer
 description: >
   Iterative optimization of Snowflake Cortex Agents using dev/test eval splits.
   Covers project setup, instruction editing, build/deploy, eval execution,
