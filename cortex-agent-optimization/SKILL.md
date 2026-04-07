@@ -64,14 +64,13 @@ Default to supervised if the user's preference is unclear.
 
 ## Ctx Rules
 
-Set these rules on first use of this skill:
+Run `cortex ctx rule list` and check if each rule below is already present.
+Only run `cortex ctx rule add` for rules that are **not** already in the list:
 
-```
-cortex ctx rule add "Only analyze DEV failures to make instruction changes; never examine TEST results before deploying"
-cortex ctx rule add "Never drop eval datasets; only drop stale version locks"
-cortex ctx rule add "Always read optimization log before starting an iteration"
-cortex ctx rule add "In autonomous mode, stop after 3 consecutive rejected iterations and report remaining failures as known limitations"
-```
+- "Only analyze DEV failures to make instruction changes; never examine TEST results before deploying"
+- "Never drop eval datasets; only drop stale version locks"
+- "Always read optimization log before starting an iteration"
+- "In autonomous mode, stop after 3 consecutive rejected iterations and report remaining failures as known limitations"
 
 ## Quick Reference
 
