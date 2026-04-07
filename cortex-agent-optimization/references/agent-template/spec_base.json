@@ -1,0 +1,34 @@
+{
+  "orchestration": {
+    "budget": {
+      "seconds": 300,
+      "tokens": 200000
+    }
+  },
+  "tools": [
+    {
+      "tool_spec": {
+        "type": "cortex_search",
+        "name": "search_tool"
+      }
+    },
+    {
+      "tool_spec": {
+        "type": "cortex_analyst_text_to_sql",
+        "name": "analyze_tool"
+      }
+    }
+  ],
+  "tool_resources": {
+    "search_tool": {
+      "name": "<DATABASE>.<SCHEMA>.<SEARCH_SERVICE>"
+    },
+    "analyze_tool": {
+      "semantic_view": "<DATABASE>.<SCHEMA>.<SEMANTIC_VIEW>",
+      "execution_environment": {
+        "type": "warehouse",
+        "warehouse": "<WAREHOUSE_NAME>"
+      }
+    }
+  }
+}

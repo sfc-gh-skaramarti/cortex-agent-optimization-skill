@@ -1,0 +1,16 @@
+# Filled-in test fixtures (contain account-specific values)
+test-fixture.md
+
+# Agent snapshots (generated during optimization runs)
+snapshots/
+
+# Generated output directories
+*_PUBLIC_*/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
