@@ -41,6 +41,8 @@ snow sql -c <CONNECTION> -q "DESCRIBE AGENT <AGENT_FQN>" --format json
 ```
 Extract current instructions and tool configuration from the spec output.
 
+**Verify live version exists:** The build script uses `ALTER AGENT ... MODIFY LIVE VERSION`, which requires the agent to already have a live version. Check the spec output for version info. If the agent was created with `CREATE AGENT` (no versioned deployment), `MODIFY LIVE VERSION` will fail. In that case, the build script should fall back to `CREATE OR REPLACE AGENT ... FROM SPECIFICATION` for the first deploy, then switch to `ALTER AGENT ... MODIFY LIVE VERSION` for subsequent iterations. Note: `CREATE OR REPLACE` resets ownership and profile — after using it, restore with `GRANT OWNERSHIP` and `ALTER AGENT SET PROFILE` as needed.
+
 **Detect existing datasets:** Run `SHOW DATASETS IN SCHEMA <DATABASE>.<SCHEMA>`. If datasets matching `<AGENT_NAME>` exist (e.g., `<AGENT_NAME>_dev_ds_v2`), reuse their names. Otherwise default to:
 - `<DEV_DATASET_NAME>`: `<AGENT_NAME>_dev_ds_v1`
 - `<TEST_DATASET_NAME>`: `<AGENT_NAME>_test_ds_v1`
@@ -67,7 +69,7 @@ Otherwise, create `<WORKSPACE_ROOT>/scripts/build_agent_spec.py` that:
 - Strips HTML comments and top-level headings from markdown
 - Parses `tool_descriptions.md` into per-tool description strings (split on `## Tool: <name>`)
 - Assembles the full spec JSON
-- Generates `ALTER AGENT <AGENT_FQN> MODIFY LIVE VERSION SET SPECIFICATION = $$...$$;`
+- Generates `ALTER AGENT <AGENT_FQN> MODIFY LIVE VERSION SET SPECIFICATION = $$...$$;` (with automatic fallback to single-quote escaping if instruction text contains literal `$$`)
 - Writes to `<WORKSPACE_ROOT>/<AGENT_DIR>/deploy.sql`
 - Supports `--dry-run` (stdout) and `--json` (spec only) flags
 
