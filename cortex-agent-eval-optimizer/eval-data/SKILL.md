@@ -143,6 +143,8 @@ LIMIT 5;
 
 Present top 5 candidates to user for merge target selection.
 
+> **Note:** `EDITDISTANCE` measures character-level edit distance, which is a rough proxy at best. Categories like "network_errors" and "network_latency" have low edit distance but are semantically different. Always present candidates for manual selection — do not auto-merge based on distance alone.
+
 ### Step 2: Preview Merge Impact
 
 Show before/after distribution if merge proceeds:
@@ -229,3 +231,38 @@ For each question missing GT:
 5. Re-run Step 1 to confirm all gaps are filled
 
 **⚠️ STOP**: Do not proceed to eval execution until Step 1 shows VALID_GT = TOTAL_QUESTIONS for ALL splits.
+
+---
+
+## Workflow F: Clean Up Old Dataset Slots
+
+Each iteration creates `<RUNS_PER_SPLIT>` dataset slots per split (`<DEV_DATASET_NAME>_r1` through `_r<RUNS_PER_SPLIT>`, same for TEST). After 10+ iterations, this accumulates 80+ datasets in the schema. Use this workflow periodically to archive old slots while preserving eval history.
+
+### Step 1: Inventory Datasets
+
+```sql
+SHOW DATASETS IN SCHEMA <DATABASE>.<SCHEMA>;
+```
+
+Filter to datasets matching `<AGENT_NAME>` naming patterns. Group by iteration (extract the iter prefix from dataset name).
+
+### Step 2: Identify Safe-to-Drop Slots
+
+A dataset slot is safe to drop if:
+- Its iteration is **not** the current baseline
+- Its iteration is **not** the last accepted iteration (needed for paired t-test comparisons)
+- The eval results have already been recorded in `optimization_log.md`
+
+**Never drop:** baseline slots, the most recent accepted iteration's slots, or any slot whose results are not yet logged.
+
+### Step 3: Drop Old Slots
+
+```sql
+-- Example: drop iter2 DEV slot 1 (after confirming results are logged)
+DROP DATASET <DATABASE>.<SCHEMA>.<DEV_DATASET_NAME>_r1;
+-- Repeat for each old slot
+```
+
+**⚠️ STOP**: Present the list of datasets to drop with their iteration mapping. Wait for user approval before executing.
+
+> **Note:** Dropping a dataset removes its eval results from `GET_AI_EVALUATION_DATA`. The optimization log serves as the permanent record. Ensure all scores are logged before dropping.

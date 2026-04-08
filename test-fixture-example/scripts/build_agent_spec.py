@@ -65,8 +65,18 @@ def build_spec(agent_dir: Path) -> dict:
     return spec
 
 def generate_deploy_sql(spec: dict, agent_fqn: str) -> str:
-    """Generate ALTER AGENT SQL."""
+    """Generate ALTER AGENT SQL.
+
+    Uses $$ delimiters by default. If the spec JSON contains literal '$$'
+    (e.g., from Snowflake dollar-quoting examples in instruction text),
+    falls back to CHR(39)-based single-quote escaping to avoid breaking
+    the SQL delimiter.
+    """
     spec_json = json.dumps(spec, indent=2)
+    if '$$' in spec_json:
+        # Escape single quotes for CHR(39) approach
+        escaped = spec_json.replace("'", "''")
+        return f"ALTER AGENT {agent_fqn}\nMODIFY LIVE VERSION\nSET SPECIFICATION = '{escaped}';\n"
     return f"""ALTER AGENT {agent_fqn}
 MODIFY LIVE VERSION
 SET SPECIFICATION = $$
