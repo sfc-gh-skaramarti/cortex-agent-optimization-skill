@@ -63,3 +63,4 @@ agent_workspace/
 - Before every edit to `agent/*.md`, a snapshot of the current state must exist in `snapshots/`.
 - On accept: snapshot `agent/*.md` to `snapshots/<ITER_NAME>/`.
 - On reject: restore `agent/*.md` from the last accepted snapshot (or `baseline/` if no iterations accepted).
+- **Dollar-quoting hazard:** If any `agent/*.md` file contains literal `$$` (e.g., Snowflake SQL examples, LaTeX), the generated `deploy.sql` must use single-quote escaping instead of `$$` delimiters. The reference `build_agent_spec.py` handles this automatically — detect `$$` in the assembled JSON and fall back to escaped single quotes.
